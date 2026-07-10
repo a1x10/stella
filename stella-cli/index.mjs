@@ -22,6 +22,7 @@ import { runSubagent, listSubagents, parseAgentCommand, SUBAGENTS } from "./suba
 import { mcp, MCP_COMMANDS } from "./mcp.mjs"
 import { generatePresentation, createPresentationFromTopic, AVAILABLE_THEMES, exportToPDF } from "./presentations.mjs"
 import { AutonomousAgent } from "./autonomous-agent.mjs"
+import { ScreenMonitor } from "./screen-monitor.mjs"
 import {
   buildRepoMap, buildProjectContext, compressContext,
   loadSpec, generateSpecTemplate,
@@ -41,7 +42,7 @@ import {
   generateAdminCode, listAuthorizedUsers,
 } from "./telegram-bot.mjs"
 
-const VERSION = "5.1.2"
+const VERSION = "5.2.0"
 const CONFIG_DIR = path.join(os.homedir(), ".stella")
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json")
 const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
@@ -650,6 +651,13 @@ const COMMANDS = [
   ["/auto-dashboard", "создать dashboard с результатами"],
   ["/auto-history", "история выполненных задач"],
 
+  // Computer Vision Monitor
+  ["/monitor", "запустить мониторинг экрана (AI vision)"],
+  ["/monitor-stop", "остановить мониторинг"],
+  ["/monitor-status", "статус мониторинга"],
+  ["/monitor-alerts", "показать обнаруженные проблемы"],
+  ["/monitor-screenshot", "сделать скриншот и проанализировать"],
+
   // Управление компьютером
   ["/open", "открыть приложение/файл/URL"],
   ["/app", "запустить приложение"],
@@ -775,6 +783,7 @@ async function handleCommand(line) {
         ["📱 Telegram", ["/tg", "/tg-stop", "/tg-notify", "/tg-sessions", "/tg-verify", "/tg-code", "/tg-users"]],
         ["🔀 Git Экосистема", ["/git-eco", "/git-pr", "/git-merge-auto"]],
         ["🤖 Autonomous Agent", ["/auto", "/auto-stop", "/auto-status", "/auto-dashboard", "/auto-history"]],
+        ["👁️ Computer Vision", ["/monitor", "/monitor-stop", "/monitor-status", "/monitor-alerts", "/monitor-screenshot"]],
         ["⚙️ Настройки", ["/help", "/model", "/clear", "/compact", "/cost", "/context", "/config", "/version", "/login", "/newkey", "/doctor", "/sessions", "/color", "/lang", "/shortcut"]],
       ]
       for (const [cat, cmds] of categories) {
@@ -3595,6 +3604,242 @@ async function handleCommand(line) {
       console.log(dim(`  Всего проектов: ${agent.memory.projects.length}`))
       console.log(dim(`  Аккаунтов: ${agent.memory.accounts.length}`))
       console.log(dim(`  Уроков: ${agent.memory.lessons.length}`))
+      console.log()
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  COMPUTER VISION MONITOR
+    // ═══════════════════════════════════════════════════
+    case "/monitor": {
+      console.log()
+      const monitor = new ScreenMonitor()
+
+      if (monitor.state.running) {
+        console.log(yellow("  Мониторинг уже запущен! Используй /monitor-stop для остановки.\n"))
+        return
+      }
+
+      const intervalSec = arg ? parseInt(arg) || 2 : 2
+      const intervalMs = intervalSec * 1000
+
+      console.log(box([
+        violet("👁️  COMPUTER VISION MONITOR"),
+        "",
+        white("Интервал: ") + cyan(`${intervalSec} секунды`),
+        white("Режим:    ") + cyan("автоматический скриншот + AI анализ"),
+        "",
+        dim("Агент будет делать скриншот каждые") + white(`${intervalSec}с`),
+        dim("и анализировать через AI на наличие ошибок, крашей, алертов."),
+        dim("Все обнаруженные проблемы будут сохранены в лог."),
+      ], { color: violet, padding: 2 }))
+      console.log()
+
+      const confirmMonitor = await question("  " + green("Запустить мониторинг? (y/n) › "))
+      if (confirmMonitor.trim().toLowerCase() !== "y" && confirmMonitor.trim().toLowerCase() !== "д") {
+        console.log(dim("  Отменено\n"))
+        return
+      }
+
+      const visionFn = async (imageBase64, recentContext) => {
+        const contextStr = recentContext?.length > 0
+          ? `\nRecent history:\n${recentContext.map(r => `- ${r.time}: ${r.summary} (${r.alerts} alerts)`).join("\n")}`
+          : ""
+
+        const prompt = `Analyze this screenshot. Detect:
+1. Error messages, crash dialogs, exception windows
+2. Alert popups, warning notifications
+3. Application crashes or "not responding" dialogs
+4. System errors, BSOD, kernel panics
+5. Any other issues or anomalies
+
+${contextStr}
+
+Return JSON:
+{
+  "summary": "one-line description of what's on screen",
+  "text": "detailed analysis of what you see",
+  "issues": ["list of issues found"],
+  "severity": "none|info|warning|critical",
+  "recommendations": ["what to do about issues"]
+}
+
+If everything looks normal, set severity to "none" and issues to [].`
+
+        const model = getModel(state.model)
+        const { text } = await generateText({
+          model,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image", image: `data:image/png;base64,${imageBase64}` }
+            ]
+          }],
+          maxTokens: 2000,
+        })
+
+        try {
+          let clean = text.trim()
+          if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
+          return JSON.parse(clean)
+        } catch {
+          return { summary: text.slice(0, 200), text, issues: [], severity: "none", recommendations: [] }
+        }
+      }
+
+      console.log()
+      startSpinner("Запускаю мониторинг")
+      const result = monitor.start(intervalMs, visionFn)
+      stopSpinner()
+
+      if (result.success) {
+        console.log(green(`  ✓ Мониторинг запущен! Интервал: ${intervalSec}с`))
+        console.log(dim("  Скриншоты сохраняются в ~/.stella/monitor/screenshots/"))
+        console.log(dim("  Используй /monitor-stop для остановки"))
+        console.log(dim("  Используй /monitor-status для проверки"))
+        console.log(dim("  Используй /monitor-alerts для просмотра проблем\n"))
+
+        // Show first capture
+        console.log(dim("  Делаю первый скриншот..."))
+        const firstCapture = await monitor.captureAndAnalyze(visionFn)
+        if (firstCapture.success) {
+          console.log(green(`  ✓ Скриншот: ${firstCapture.capture.sizeKB}KB`))
+          if (firstCapture.capture.analysis?.summary) {
+            console.log(dim("  Анализ: ") + white(firstCapture.capture.analysis.summary))
+          }
+          if (firstCapture.capture.alerts?.length > 0) {
+            console.log(yellow(`  ⚠️ Обнаружено проблем: ${firstCapture.capture.alerts.length}`))
+          }
+        }
+        console.log()
+      } else {
+        console.log(red(`  ✗ ${result.error}\n`))
+      }
+      return
+    }
+
+    case "/monitor-stop": {
+      console.log()
+      const monitor = new ScreenMonitor()
+      if (!monitor.state.running) {
+        console.log(dim("  Мониторинг не запущен\n"))
+        return
+      }
+      monitor.stop()
+      console.log(green("  ✓ Мониторинг остановлен"))
+      console.log(dim(`  Всего скриншотов: ${monitor.state.totalCaptures}`))
+      console.log(dim(`  Всего алертов: ${monitor.state.totalAlerts}`))
+      console.log()
+      return
+    }
+
+    case "/monitor-status": {
+      console.log()
+      const monitor = new ScreenMonitor()
+      const status = monitor.getStatus()
+
+      if (!status.running && status.totalCaptures === 0) {
+        console.log(dim("  Мониторинг не запущен. Используй /monitor для запуска.\n"))
+        return
+      }
+
+      const items = [
+        dim("Статус:     ") + (status.running ? green("● RUNNING") : red("○ STOPPED")),
+        dim("Интервал:   ") + cyan(`every ${status.interval / 1000}s`),
+        dim("Начато:     ") + white(status.startedAt ? new Date(status.startedAt).toLocaleString() : "—"),
+        dim("Скриншотов: ") + cyan(String(status.totalCaptures)),
+        dim("Алертов:    ") + (status.totalAlerts > 0 ? red(String(status.totalAlerts)) : green("0")),
+        dim("PID:        ") + white(String(status.pid || "—")),
+      ]
+
+      if (status.recentAlerts.length > 0) {
+        items.push("", violet("Последние алерты:"))
+        for (const a of status.recentAlerts.slice(-5)) {
+          const icon = a.severity === "critical" ? red("🔴") : yellow("🟡")
+          items.push(`  ${icon} [${new Date(a.timestamp).toLocaleTimeString()}] ${a.type}`)
+          if (a.description) items.push(dim(`     ${a.description.slice(0, 100)}`))
+        }
+      }
+
+      if (status.recentCaptures.length > 0) {
+        items.push("", dim("Последние скриншоты:"))
+        for (const c of status.recentCaptures) {
+          const icon = c.alertCount > 0 ? yellow("⚠️") : green("✅")
+          items.push(`  ${icon} [${new Date(c.time).toLocaleTimeString()}] ${c.summary}`)
+        }
+      }
+
+      console.log(box(items, { title: "👁️ Monitor Status", color: violet, padding: 2 }))
+      console.log()
+      return
+    }
+
+    case "/monitor-alerts": {
+      console.log()
+      const monitor = new ScreenMonitor()
+      const alerts = monitor.getAlerts()
+
+      if (alerts.length === 0) {
+        console.log(dim("  Нет обнаруженных проблем. Всё чисто! ✅\n"))
+        return
+      }
+
+      console.log(box([
+        violet(`Всего алертов: ${alerts.length}`),
+        "",
+        ...alerts.slice(-15).map(a => {
+          const icon = a.severity === "critical" ? red("🔴") : yellow("🟡")
+          return `${icon} [${new Date(a.timestamp).toLocaleTimeString()}] ${a.type}`
+        }),
+      ], { title: "⚠️ Monitor Alerts", color: yellow, padding: 2 }))
+      console.log()
+      return
+    }
+
+    case "/monitor-screenshot": {
+      console.log()
+      startSpinner("Делаю скриншот")
+      const monitor = new ScreenMonitor()
+
+      const visionFn = async (imageBase64) => {
+        const prompt = `Analyze this screenshot in detail. What's on screen? Any errors, issues, or anomalies? Return JSON with "summary", "text", "issues", "severity".`
+        const model = getModel(state.model)
+        const { text } = await generateText({
+          model,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image", image: `data:image/png;base64,${imageBase64}` }
+            ]
+          }],
+          maxTokens: 2000,
+        })
+        try { return JSON.parse(text) } catch { return { summary: text.slice(0, 200), text } }
+      }
+
+      const capture = await monitor.captureAndAnalyze(visionFn)
+      stopSpinner()
+
+      if (capture.success) {
+        console.log(box([
+          green("✓ Скриншот сделан!"),
+          "",
+          dim("Файл:   ") + cyan(capture.capture.path),
+          dim("Размер: ") + white(`${capture.capture.sizeKB}KB`),
+          "",
+          violet("Анализ:"),
+          white(capture.capture.analysis?.summary || "analyzing..."),
+          capture.capture.analysis?.text ? dim(capture.capture.analysis.text.slice(0, 500)) : "",
+          "",
+          capture.capture.alerts?.length > 0
+            ? yellow(`⚠️ Обнаружено проблем: ${capture.capture.alerts.length}`)
+            : green("✅ Проблем не обнаружено"),
+        ], { title: "📸 Screenshot Analysis", color: cyan, padding: 2 }))
+      } else {
+        console.log(red(`  ✗ ${capture.error}\n`))
+      }
       console.log()
       return
     }
