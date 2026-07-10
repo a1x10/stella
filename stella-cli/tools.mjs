@@ -2,6 +2,7 @@ import { tool } from "ai"
 import { z } from "zod"
 import fs from "node:fs"
 import path from "node:path"
+import os from "node:os"
 import { execSync } from "node:child_process"
 
 const MAX_OUTPUT = 30000
@@ -949,12 +950,12 @@ export function createTools(permissions) {
             platform: process.platform,
             arch: process.arch,
             nodeVersion: process.version,
-            hostname: require("os").hostname(),
-            username: require("os").userInfo().username,
-            cpus: require("os").cpus().length,
-            totalMemory: `${(require("os").totalmem() / 1e9).toFixed(1)} GB`,
-            freeMemory: `${(require("os").freemem() / 1e9).toFixed(1)} GB`,
-            uptime: `${Math.floor(require("os").uptime() / 3600)}h ${Math.floor((require("os").uptime() % 3600) / 60)}m`,
+            hostname: os.hostname(),
+            username: os.userInfo().username,
+            cpus: os.cpus().length,
+            totalMemory: `${(os.totalmem() / 1e9).toFixed(1)} GB`,
+            freeMemory: `${(os.freemem() / 1e9).toFixed(1)} GB`,
+            uptime: `${Math.floor(os.uptime() / 3600)}h ${Math.floor((os.uptime() % 3600) / 60)}m`,
           }
           return info
         } catch (e) {

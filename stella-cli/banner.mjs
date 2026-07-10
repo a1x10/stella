@@ -30,7 +30,7 @@ export function printBanner({ model, cwd, version }) {
   console.log(
     box(
       [
-        violet("✻") + " Добро пожаловать в " + bold(violet("Stella Coder 5.0")) + "!",
+        violet("✻") + " Добро пожаловать в " + bold(violet("Stella Coder 5.1")) + "!",
         "",
         dim("  модель:  ") + blue(model),
         dim("  папка:   ") + gray(cwd),

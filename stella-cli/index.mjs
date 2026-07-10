@@ -21,6 +21,7 @@ import {
 import { runSubagent, listSubagents, parseAgentCommand, SUBAGENTS } from "./subagents.mjs"
 import { mcp, MCP_COMMANDS } from "./mcp.mjs"
 import { generatePresentation, createPresentationFromTopic, AVAILABLE_THEMES, exportToPDF } from "./presentations.mjs"
+import { AutonomousAgent } from "./autonomous-agent.mjs"
 import {
   buildRepoMap, buildProjectContext, compressContext,
   loadSpec, generateSpecTemplate,
@@ -40,7 +41,7 @@ import {
   generateAdminCode, listAuthorizedUsers,
 } from "./telegram-bot.mjs"
 
-const VERSION = "5.0.1"
+const VERSION = "5.1.0"
 const CONFIG_DIR = path.join(os.homedir(), ".stella")
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json")
 const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
@@ -642,6 +643,13 @@ const COMMANDS = [
   ["/tg-code", "сгенерировать код для продажи доступа"],
   ["/tg-users", "показать кто подключён"],
 
+  // Autonomous Agent
+  ["/auto", "запустить автономный режим (цель)"],
+  ["/auto-stop", "остановить автономный агента"],
+  ["/auto-status", "статус автономного агента"],
+  ["/auto-dashboard", "создать dashboard с результатами"],
+  ["/auto-history", "история выполненных задач"],
+
   // Управление компьютером
   ["/open", "открыть приложение/файл/URL"],
   ["/app", "запустить приложение"],
@@ -766,6 +774,7 @@ async function handleCommand(line) {
         ["🧠 Coding Brain", ["/brain", "/brain-map", "/brain-compress", "/spec", "/tdd", "/lint-auto", "/format-auto", "/typecheck-auto", "/test-auto", "/fix-all"]],
         ["📱 Telegram", ["/tg", "/tg-stop", "/tg-notify", "/tg-sessions", "/tg-verify", "/tg-code", "/tg-users"]],
         ["🔀 Git Экосистема", ["/git-eco", "/git-pr", "/git-merge-auto"]],
+        ["🤖 Autonomous Agent", ["/auto", "/auto-stop", "/auto-status", "/auto-dashboard", "/auto-history"]],
         ["⚙️ Настройки", ["/help", "/model", "/clear", "/compact", "/cost", "/context", "/config", "/version", "/login", "/newkey", "/doctor", "/sessions", "/color", "/lang", "/shortcut"]],
       ]
       for (const [cat, cmds] of categories) {
@@ -3383,6 +3392,204 @@ async function handleCommand(line) {
           ),
         ], { title: "Подключённые пользователи", color: blue, padding: 2 }))
       }
+      console.log()
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  AUTONOMOUS AGENT
+    // ═══════════════════════════════════════════════════
+    case "/auto": {
+      if (!arg) {
+        console.log(dim("\n  Использование: /auto <цель>\n"))
+        console.log(dim("  Пример: /auto создай приложение и заработай $10\n"))
+        console.log(dim("  Агент будет работать автономно пока не выполнит цель.\n"))
+        return
+      }
+
+      const goal = arg.trim()
+      const agent = new AutonomousAgent()
+
+      console.log()
+      console.log(box([
+        violet("🤖 AUTONOMOUS AGENT"),
+        "",
+        white("Цель: ") + cyan(goal),
+        "",
+        dim("Агент создаст план и начнёт автономное выполнение."),
+        dim("Каждый шаг будет выполняться автоматически."),
+        dim("Используй /auto-stop для остановки."),
+        dim("Используй /auto-status для проверки прогресса."),
+      ], { color: violet, padding: 2 }))
+      console.log()
+
+      const confirm = await question("  " + green("Начать автономное выполнение? (y/n) › "))
+      if (confirm.trim().toLowerCase() !== "y" && confirm.trim().toLowerCase() !== "д") {
+        console.log(dim("  Отменено\n"))
+        return
+      }
+
+      console.log()
+      startSpinner("Составляю план выполнения")
+      const plan = agent.planGoal(goal)
+      stopSpinner()
+
+      console.log(box([
+        green("✓ План создан!"),
+        "",
+        ...plan.steps.map((s, i) => dim(`  ${i + 1}. `) + white(s.name)),
+        "",
+        dim(`Всего шагов: ${plan.steps.length}`),
+      ], { title: "План", color: green, padding: 2 }))
+      console.log()
+
+      const apiCall = async (prompt) => {
+        const response = await queryAI(prompt, apiKey, state.model)
+        return response
+      }
+
+      console.log(dim("  Запускаю автономный режим...\n"))
+
+      agent.state.running = true
+      agent.state.startedAt = new Date().toISOString()
+      agent.state.goal = goal
+      agent.save()
+
+      let stepCount = 0
+      const runAuto = async () => {
+        while (agent.state.running) {
+          const result = await agent.runIteration(apiCall, (msg) => {
+            if (msg === "ALL_DONE") {
+              console.log(green("\n  ✅ ВСЕ ЗАДАЧИ ВЫПОЛНЕНЫ!\n"))
+              agent.generateDashboard()
+              console.log(dim("  Dashboard: ~/.stella/autonomous/dashboard.html\n"))
+              return
+            }
+            console.log(dim("  ") + violet("→") + " " + white(msg))
+          })
+
+          if (!result) {
+            agent.state.running = false
+            agent.save()
+            console.log(green("\n  ✅ Все планы выполнены!\n"))
+            agent.generateDashboard()
+            console.log(dim("  Dashboard: ~/.stella/autonomous/dashboard.html\n"))
+            break
+          }
+
+          stepCount++
+          if (stepCount % 5 === 0) {
+            console.log(dim(`  [${stepCount} шагов выполнено]`))
+          }
+
+          await new Promise(r => setTimeout(r, 1000))
+        }
+      }
+
+      runAuto().catch(err => {
+        console.log(red(`\n  ✗ Ошибка: ${err.message}\n`))
+        agent.state.running = false
+        agent.save()
+      })
+
+      return
+    }
+
+    case "/auto-stop": {
+      console.log()
+      const agent = new AutonomousAgent()
+      if (!agent.state.running) {
+        console.log(dim("  Агент не запущен\n"))
+        return
+      }
+      agent.stop()
+      console.log(green("  ✓ Автономный агент остановлен\n"))
+      console.log(dim(`  Выполнено шагов: ${agent.state.iterations}`))
+      console.log(dim(`  Создано файлов: ${agent.memory.projects.length}`))
+      console.log()
+      return
+    }
+
+    case "/auto-status": {
+      console.log()
+      const agent = new AutonomousAgent()
+      const status = agent.getStatus()
+
+      if (!status.running && !status.currentPlan) {
+        console.log(dim("  Агент не запущен. Используй /auto <цель> для запуска.\n"))
+        return
+      }
+
+      const items = [
+        dim("Статус:     ") + (status.running ? green("● RUNNINg") : red("○ STOPPED")),
+        dim("Цель:       ") + white(status.goal || "Нет"),
+        dim("Итераций:   ") + cyan(String(status.iterations)),
+        dim("Начато:     ") + white(status.startedAt ? new Date(status.startedAt).toLocaleString() : "—"),
+        "",
+        dim("Планов выполнено: ") + green(String(status.completedPlans)),
+        dim("Планов.failed:    ") + red(String(status.failedPlans)),
+        dim("Файлов создано:   ") + cyan(String(status.totalFiles)),
+        dim("Заработано:       ") + green("$" + status.totalEarnings.toFixed(2)),
+        dim("Аккаунтов:        ") + cyan(String(status.accounts)),
+      ]
+
+      if (status.currentPlan) {
+        items.push("", violet("Текущий план: ") + white(status.currentPlan.goal))
+        items.push(dim("Прогресс:"))
+        for (const step of status.currentPlan.steps) {
+          const icon = step.status === "completed" ? green("✓") : step.status === "running" ? yellow("●") : step.status === "failed" ? red("✗") : dim("○")
+          items.push(`  ${icon} ${step.name} ${dim(`(${step.done}/${step.total})`)}`)
+        }
+      }
+
+      console.log(box(items, { title: "🤖 Autonomous Agent Status", color: violet, padding: 2 }))
+      console.log()
+      return
+    }
+
+    case "/auto-dashboard": {
+      console.log()
+      const agent = new AutonomousAgent()
+      startSpinner("Создаю dashboard")
+      const path = agent.generateDashboard()
+      stopSpinner()
+      console.log(green(`  ✓ Dashboard создан: ${path}`))
+      console.log(dim("  Откройте в браузере для просмотра результатов\n"))
+
+      const openIt = await question("  " + green("Открыть dashboard? (y/n) › "))
+      if (openIt.trim().toLowerCase() === "y" || openIt.trim().toLowerCase() === "д") {
+        try {
+          execSync(`start "" "${path}"`, { shell: "cmd.exe", stdio: "pipe" })
+        } catch (e) {
+          console.log(yellow("  ⚠ Не удалось открыть автоматически\n"))
+        }
+      }
+      console.log()
+      return
+    }
+
+    case "/auto-history": {
+      console.log()
+      const agent = new AutonomousAgent()
+      const allPlans = agent.tasks.queue
+
+      if (allPlans.length === 0) {
+        console.log(dim("  Нет истории. Используй /auto <цель> для запуска.\n"))
+        return
+      }
+
+      console.log(box([
+        ...allPlans.map(p => {
+          const icon = p.status === "completed" ? green("✓") : p.status === "failed" ? red("✗") : yellow("●")
+          return `${icon} ${white(p.goal)} ${dim(`(${p.status})`)}`
+        }),
+      ], { title: "История автономных задач", color: violet, padding: 2 }))
+      console.log()
+
+      // Show memory stats
+      console.log(dim(`  Всего проектов: ${agent.memory.projects.length}`))
+      console.log(dim(`  Аккаунтов: ${agent.memory.accounts.length}`))
+      console.log(dim(`  Уроков: ${agent.memory.lessons.length}`))
       console.log()
       return
     }
