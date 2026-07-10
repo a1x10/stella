@@ -3444,8 +3444,13 @@ async function handleCommand(line) {
       console.log()
 
       const apiCall = async (prompt) => {
-        const response = await queryAI(prompt, apiKey, state.model)
-        return response
+        const model = getModel(state.model)
+        const { text } = await generateText({
+          model,
+          messages: [{ role: "user", content: prompt }],
+          maxTokens: 16000,
+        })
+        return text
       }
 
       console.log(dim("  Запускаю автономный режим...\n"))
