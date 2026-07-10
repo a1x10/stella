@@ -1,0 +1,26 @@
+# Excluded from npm package
+src/
+app/
+components/
+hooks/
+lib/
+public/
+.next/
+*-backup-v3.9/
+zen-website/
+stella-portfolio/
+presentation-*/
+*.log
+dev-out.txt
+dev-err.txt
+.env
+.env.local
+.git/
+.vscode/
+.idea/
+install-for-buyer.bat
+README-BUYER.md
+Stella-For-Buyer.zip
+stella-coder-*.tgz
+create_cats_pptx.py
+hello.py
