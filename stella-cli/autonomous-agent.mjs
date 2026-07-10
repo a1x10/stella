@@ -62,7 +62,30 @@ export class AutonomousAgent {
 
     const g = goal.toLowerCase()
 
-    if (g.includes("приложен") || g.includes("app") || g.includes("заработ") || g.includes("$") || g.includes("монетиз")) {
+    if (g.includes("видео") || g.includes("video")) {
+      plan.steps = [
+        { id: "concept", name: "Create video concept and script", status: "pending", subtasks: [
+          "Write a compelling script/storyboard for the video",
+          "Create HTML presentation with animations showing the product",
+          "Add text overlays, transitions, and effects"
+        ], results: [] },
+        { id: "build_video", name: "Build HTML video/animation", status: "pending", subtasks: [
+          "Create self-contained HTML file with CSS animations",
+          "Add GSAP or CSS keyframe animations",
+          "Create cinematic transitions between scenes",
+          "Add background music placeholder"
+        ], results: [] },
+        { id: "export", name: "Export and place on desktop", status: "pending", subtasks: [
+          "Copy the HTML video file to Desktop",
+          "Create a .bat launcher to open it in browser",
+          "Create a poster/thumbnail image"
+        ], results: [] },
+        { id: "promote", name: "Promote the content", status: "pending", subtasks: [
+          "Create social media post templates",
+          "Write promotional text for sharing"
+        ], results: [] }
+      ]
+    } else if (g.includes("приложен") || g.includes("app") || g.includes("заработ") || g.includes("$") || g.includes("монетиз") || g.includes("donate") || g.includes("заработ")) {
       plan.steps = [
         { id: "research", name: "Research market & competitors", status: "pending", subtasks: [
           "Search for trending app ideas and niches",
@@ -175,40 +198,79 @@ export class AutonomousAgent {
     const prompt = `You are an autonomous coding agent. Complete this task: "${subtask}"
 Context: Goal is "${goal}"
 
-You have access to:
-- File system (create/edit files)
-- npm/pnpm (install packages)
-- Git (commit, push)
-- Web search (find information)
-- Shell commands (run anything)
+You MUST return a JSON object with actual executable commands and file contents.
+DO NOT just describe — ACTUALLY PLAN THE EXECUTION.
 
-DO NOT just describe what to do. ACTUALLY DO IT. Create REAL files, run REAL commands, make REAL progress.
-
-Return a JSON object:
+Return this exact JSON structure:
 {
-  "action": "what was done",
-  "filesCreated": ["list of files created"],
-  "commandsRun": ["commands executed"],
-  "result": "description of result",
+  "action": "what will be done",
+  "filesToCreate": [
+    {"path": "relative/path/file.ext", "content": "FULL file content with all code"}
+  ],
+  "commandsToRun": [
+    "shell command 1",
+    "shell command 2"
+  ],
+  "result": "description of what will happen",
   "nextSteps": ["what to do next"]
-}`
+}
+
+IMPORTANT:
+- filesToCreate must contain REAL, COMPLETE, WORKING code (not placeholders)
+- commandsToRun must be real shell commands (npm init, mkdir, etc.)
+- Return ONLY the JSON, no markdown, no explanations`
 
     const response = await apiCall(prompt)
     let parsed
     try {
-      parsed = typeof response === "string" ? JSON.parse(response) : response
+      // Strip markdown code fences if present
+      let clean = response.trim()
+      if (clean.startsWith("```")) {
+        clean = clean.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
+      }
+      parsed = JSON.parse(clean)
     } catch {
-      parsed = { action: "completed", result: response, filesCreated: [], commandsRun: [] }
+      parsed = { action: "completed", result: response, filesToCreate: [], commandsToRun: [] }
     }
 
-    if (parsed.filesCreated) {
-      for (const f of parsed.filesCreated) {
-        this.memory.projects.push({ file: f, created: new Date().toISOString(), goal, subtask })
+    const created = []
+    const executed = []
+
+    // Create actual files
+    if (parsed.filesToCreate && Array.isArray(parsed.filesToCreate)) {
+      for (const file of parsed.filesToCreate) {
+        if (file.path && file.content) {
+          try {
+            const fullPath = join(process.cwd(), file.path)
+            const dir = dirname(fullPath)
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+            writeFileSync(fullPath, file.content, "utf-8")
+            created.push(file.path)
+            this.memory.projects.push({ file: file.path, created: new Date().toISOString(), goal, subtask })
+            logEntry("FILE_CREATED", file.path)
+          } catch (err) {
+            logEntry("FILE_ERROR", `${file.path}: ${err.message}`)
+          }
+        }
       }
     }
-    logEntry("SUBTASK_DONE", `${subtask}: ${parsed.result || "done"}`)
+
+    // Execute actual commands
+    if (parsed.commandsToRun && Array.isArray(parsed.commandsToRun)) {
+      for (const cmd of parsed.commandsToRun) {
+        try {
+          execSync(cmd, { timeout: 30000, stdio: "pipe", shell: true, cwd: process.cwd() })
+          executed.push(cmd)
+          logEntry("CMD_RUN", cmd)
+        } catch (err) {
+          logEntry("CMD_FAIL", `${cmd}: ${err.message?.slice(0, 100)}`)
+        }
+      }
+    }
+
+    logEntry("SUBTASK_DONE", `${subtask}: ${created.length} files, ${executed.length} cmds`)
     this.save()
-    return parsed
+    return { ...parsed, filesCreated: created, commandsRun: executed }
   }
 
   async runIteration(apiCall, onProgress) {
@@ -227,7 +289,7 @@ Return a JSON object:
 
     step.status = "running"
     this.save()
-    if (onProgress) onProgress(`Executing: ${step.name}`)
+    if (onProgress) onProgress(`⚡ Executing: ${step.name}`)
     logEntry("STEP_START", step.name)
 
     const stepResults = []
@@ -238,6 +300,18 @@ Return a JSON object:
         if (onProgress) onProgress(`  → ${subtask}`)
         const result = await this.executeSubtask(subtask, plan.goal, apiCall)
         stepResults.push(result)
+        
+        // Report created files
+        if (result.filesCreated && result.filesCreated.length > 0) {
+          for (const f of result.filesCreated) {
+            if (onProgress) onProgress(`  📄 Created: ${f}`)
+          }
+        }
+        if (result.commandsRun && result.commandsRun.length > 0) {
+          for (const c of result.commandsRun) {
+            if (onProgress) onProgress(`  ⚙️ Ran: ${c}`)
+          }
+        }
       } catch (err) {
         logEntry("SUBTASK_FAIL", `${subtask}: ${err.message}`)
         stepResults.push({ error: err.message })
