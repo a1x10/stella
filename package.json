@@ -1,6 +1,6 @@
 {
   "name": "stella-coder",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "private": false,
   "description": "Stella Coder 5.0 — AI coding agent with Telegram bot, huge context, TDD, Git ecosystem, presentations, computer control, smart home, Office automation, and antivirus",
   "main": "stella-cli/index.mjs",
@@ -36,6 +36,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "gsap": "^3.15.0",
+    "jsdom": "^29.1.1",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "react": "^19",

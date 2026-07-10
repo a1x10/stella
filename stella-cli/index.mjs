@@ -23,6 +23,9 @@ import { mcp, MCP_COMMANDS } from "./mcp.mjs"
 import { generatePresentation, createPresentationFromTopic, AVAILABLE_THEMES, exportToPDF } from "./presentations.mjs"
 import { AutonomousAgent } from "./autonomous-agent.mjs"
 import { ScreenMonitor } from "./screen-monitor.mjs"
+import { ChromeBrowser } from "./browser-control.mjs"
+import { GitAPI } from "./git-api.mjs"
+import { WebParser } from "./web-parser.mjs"
 import {
   buildRepoMap, buildProjectContext, compressContext,
   loadSpec, generateSpecTemplate,
@@ -658,6 +661,37 @@ const COMMANDS = [
   ["/monitor-alerts", "показать обнаруженные проблемы"],
   ["/monitor-screenshot", "сделать скриншот и проанализировать"],
 
+  // Chrome DevTools Protocol
+  ["/browser", "открыть браузер и перейти на URL"],
+  ["/browser-click", "кликнуть по элементу (CSS selector)"],
+  ["/browser-type", "набрать текст в поле"],
+  ["/browser-scroll", "прокрутить страницу"],
+  ["/browser-screenshot", "скриншот текущей страницы"],
+  ["/browser-links", "показать все ссылки"],
+  ["/browser-forms", "показать формы на странице"],
+  ["/browser-close", "закрыть браузер"],
+
+  // Git API (GitHub/GitLab)
+  ["/git-issues", "список issues"],
+  ["/git-issue", "создать issue"],
+  ["/git-prs", "список Pull Requests"],
+  ["/git-pr-create", "создать Pull Request"],
+  ["/git-pr-review", "оставить ревью на PR"],
+  ["/git-pr-merge", "слить PR"],
+  ["/git-branches", "список веток"],
+  ["/git-releases", "список релизов"],
+  ["/git-release", "создать релиз"],
+
+  // Web Parser
+  ["/fetch", "загрузить и показать страницу"],
+  ["/fetch-text", "извлечь текст со страницы"],
+  ["/fetch-links", "извлечь все ссылки"],
+  ["/fetch-images", "извлечь все картинки"],
+  ["/fetch-forms", "извлечь формы"],
+  ["/fetch-seo", "SEO анализ страницы"],
+  ["/web-search", "поиск в интернете"],
+  ["/web-batch", "загрузить несколько страниц"],
+
   // Управление компьютером
   ["/open", "открыть приложение/файл/URL"],
   ["/app", "запустить приложение"],
@@ -784,6 +818,9 @@ async function handleCommand(line) {
         ["🔀 Git Экосистема", ["/git-eco", "/git-pr", "/git-merge-auto"]],
         ["🤖 Autonomous Agent", ["/auto", "/auto-stop", "/auto-status", "/auto-dashboard", "/auto-history"]],
         ["👁️ Computer Vision", ["/monitor", "/monitor-stop", "/monitor-status", "/monitor-alerts", "/monitor-screenshot"]],
+        ["🌐 Browser Control", ["/browser", "/browser-click", "/browser-type", "/browser-scroll", "/browser-screenshot", "/browser-links", "/browser-forms", "/browser-close"]],
+        ["🔗 Git API", ["/git-issues", "/git-issue", "/git-prs", "/git-pr-create", "/git-pr-review", "/git-pr-merge", "/git-branches", "/git-releases", "/git-release"]],
+        ["🔍 Web Parser", ["/fetch", "/fetch-text", "/fetch-links", "/fetch-images", "/fetch-forms", "/fetch-seo", "/web-search", "/web-batch"]],
         ["⚙️ Настройки", ["/help", "/model", "/clear", "/compact", "/cost", "/context", "/config", "/version", "/login", "/newkey", "/doctor", "/sessions", "/color", "/lang", "/shortcut"]],
       ]
       for (const [cat, cmds] of categories) {
@@ -3840,6 +3877,410 @@ If everything looks normal, set severity to "none" and issues to [].`
       } else {
         console.log(red(`  ✗ ${capture.error}\n`))
       }
+      console.log()
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  CHROME DEVTOOLS PROTOCOL (BROWSER CONTROL)
+    // ═══════════════════════════════════════════════════
+    case "/browser": {
+      console.log()
+      const browser = new ChromeBrowser()
+      const url = arg || "about:blank"
+      startSpinner("Launching browser")
+      const launch = await browser.launch(false)
+      stopSpinner()
+      if (!launch.success) { console.log(red(`  ✗ ${launch.error}\n`)); return }
+      startSpinner("Connecting")
+      const conn = await browser.connect()
+      stopSpinner()
+      if (!conn.success) { console.log(red(`  ✗ ${conn.error}\n`)); return }
+      startSpinner(`Navigating to ${url}`)
+      await browser.navigate(url)
+      stopSpinner()
+      const title = await browser.getTitle()
+      console.log(box([
+        green("✓ Browser launched!"), "",
+        dim("URL:   ") + cyan(url),
+        dim("Title: ") + white(title.title || "—"), "",
+        dim("Commands: /browser-click, /browser-type, /browser-scroll"),
+        dim("          /browser-screenshot, /browser-links, /browser-close"),
+      ], { title: "🌐 Browser", color: cyan, padding: 2 }))
+      console.log()
+      return
+    }
+
+    case "/browser-click": {
+      if (!arg) { console.log(dim("\n  Usage: /browser-click <css-selector>\n")); return }
+      const browser = new ChromeBrowser()
+      const result = await browser.click(arg.trim())
+      if (result.success) console.log(green(`  ✓ Clicked at (${result.x}, ${result.y})\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/browser-type": {
+      if (!arg) { console.log(dim("\n  Usage: /browser-type <selector> <text>\n")); return }
+      const [sel, ...textParts] = arg.split(" ")
+      const text = textParts.join(" ")
+      const browser = new ChromeBrowser()
+      const result = await browser.type(sel, text)
+      if (result.success) console.log(green(`  ✓ Typed "${text}" in ${sel}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/browser-scroll": {
+      const browser = new ChromeBrowser()
+      const delta = arg ? parseInt(arg) || 300 : 300
+      await browser.scroll(0, delta)
+      console.log(green(`  ✓ Scrolled ${delta}px\n`))
+      return
+    }
+
+    case "/browser-screenshot": {
+      const browser = new ChromeBrowser()
+      const ss = await browser.screenshot()
+      if (ss.success) {
+        console.log(green(`  ✓ Screenshot saved: ${ss.path}\n`))
+        try { execSync(`start "" "${ss.path}"`, { shell: "cmd.exe" }) } catch {}
+      } else {
+        console.log(red(`  ✗ ${ss.error}\n`))
+      }
+      return
+    }
+
+    case "/browser-links": {
+      const browser = new ChromeBrowser()
+      const links = await browser.getLinks()
+      if (links.success && links.links.length > 0) {
+        console.log(box([
+          ...links.links.slice(0, 20).map(l => cyan(l.text.slice(0, 50)) + dim(` → ${l.href.slice(0, 60)}`)),
+          links.links.length > 20 ? dim(`... and ${links.links.length - 20} more`) : "",
+        ].filter(Boolean), { title: `🔗 Links (${links.links.length})`, color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No links found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/browser-forms": {
+      const browser = new ChromeBrowser()
+      const forms = await browser.getForms()
+      if (forms.success && forms.forms.length > 0) {
+        console.log(box([
+          ...forms.forms.map((f, i) => [
+            violet(`Form ${i + 1}: ${f.method} ${f.action?.slice(0, 50)}`),
+            ...f.inputs.map(inp => dim(`  ${inp.name || inp.type}: ${inp.placeholder || ""}`)),
+          ].join("\n")),
+        ], { title: `📝 Forms (${forms.forms.length})`, color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No forms found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/browser-close": {
+      const browser = new ChromeBrowser()
+      browser.close()
+      console.log(green("  ✓ Browser closed\n"))
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  GIT API (GitHub/GitLab)
+    // ═══════════════════════════════════════════════════
+    case "/git-issues": {
+      console.log()
+      const api = new GitAPI()
+      if (!api.isConfigured()) { console.log(red("  ✗ No GitHub/GitLab remote found\n")); return }
+      if (!api.hasToken()) { console.log(yellow("  ⚠ No token. Set GITHUB_TOKEN or GITLAB_TOKEN\n")); return }
+      startSpinner("Fetching issues")
+      const result = await api.listIssues()
+      stopSpinner()
+      if (result.success && result.issues.length > 0) {
+        console.log(box([
+          ...result.issues.slice(0, 15).map(i => {
+            const num = i.number || i.iid
+            const state = i.state === "open" ? green("●") : red("●")
+            return `${state} ${violet(`#${num}`)} ${white(i.title?.slice(0, 60))}`
+          }),
+        ], { title: `📋 Issues (${result.issues.length})`, color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No issues found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/git-issue": {
+      if (!arg) { console.log(dim("\n  Usage: /git-issue <title>\n")); return }
+      const api = new GitAPI()
+      if (!api.isConfigured() || !api.hasToken()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Creating issue")
+      const result = await api.createIssue(arg.trim(), `Created by Stella Coder\n\n_${new Date().toISOString()}_`)
+      stopSpinner()
+      if (result.success) {
+        console.log(green(`  ✓ Issue created: ${result.url}\n`))
+      } else {
+        console.log(red(`  ✗ Failed to create issue\n`))
+      }
+      return
+    }
+
+    case "/git-prs": {
+      console.log()
+      const api = new GitAPI()
+      if (!api.isConfigured() || !api.hasToken()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Fetching PRs")
+      const result = await api.listPRs()
+      stopSpinner()
+      if (result.success && result.prs.length > 0) {
+        console.log(box([
+          ...result.prs.slice(0, 15).map(pr => {
+            const num = pr.number || pr.iid
+            const state = pr.merged_at ? violet("merged") : pr.state === "open" ? green("open") : red("closed")
+            return `${state} ${violet(`#${num}`)} ${white(pr.title?.slice(0, 60))}`
+          }),
+        ], { title: `🔀 Pull Requests (${result.prs.length})`, color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No PRs found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/git-pr-create": {
+      if (!arg) { console.log(dim("\n  Usage: /git-pr-create <title>\n")); return }
+      const api = new GitAPI()
+      if (!api.isConfigured() || !api.hasToken()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Creating PR")
+      const result = await api.createPR(arg.trim(), `Created by Stella Coder\n\n_${new Date().toISOString()}_`)
+      stopSpinner()
+      if (result.success) {
+        console.log(green(`  ✓ PR created: ${result.url}\n`))
+      } else {
+        console.log(red(`  ✗ Failed to create PR\n`))
+      }
+      return
+    }
+
+    case "/git-pr-review": {
+      if (!arg) { console.log(dim("\n  Usage: /git-pr-review <number> <APPROVE|REQUEST_CHANGES|COMMENT>\n")); return }
+      const [prNum, ...reviewParts] = arg.split(" ")
+      const reviewEvent = reviewParts.join(" ") || "COMMENT"
+      const api = new GitAPI()
+      if (!api.isConfigured() || !api.hasToken()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Submitting review")
+      const result = await api.reviewPR(parseInt(prNum), reviewEvent, `Review by Stella Coder`)
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ Review submitted on #${prNum}\n`))
+      else console.log(red(`  ✗ Failed\n`))
+      return
+    }
+
+    case "/git-pr-merge": {
+      if (!arg) { console.log(dim("\n  Usage: /git-pr-merge <number>\n")); return }
+      const api = new GitAPI()
+      if (!api.isConfigured() || !api.hasToken()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Merging PR")
+      const result = await api.mergePR(parseInt(arg))
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ PR #${arg} merged\n`))
+      else console.log(red(`  ✗ Failed\n`))
+      return
+    }
+
+    case "/git-branches": {
+      console.log()
+      const api = new GitAPI()
+      if (!api.isConfigured()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Fetching branches")
+      const result = await api.listBranches()
+      stopSpinner()
+      if (result.success) {
+        console.log(box(result.branches.map(b => cyan(b)), { title: "🌿 Branches", color: cyan, padding: 2 }))
+      }
+      console.log()
+      return
+    }
+
+    case "/git-releases": {
+      console.log()
+      const api = new GitAPI()
+      if (!api.isConfigured()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Fetching releases")
+      const result = await api.listReleases()
+      stopSpinner()
+      if (result.success && result.releases.length > 0) {
+        console.log(box([
+          ...result.releases.slice(0, 10).map(r => green(r.tag_name) + dim(` — ${r.name || ""}`)),
+        ], { title: `📦 Releases (${result.releases.length})`, color: green, padding: 2 }))
+      } else {
+        console.log(dim("  No releases found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/git-release": {
+      if (!arg) { console.log(dim("\n  Usage: /git-release <tag> [name]\n")); return }
+      const [tag, ...nameParts] = arg.split(" ")
+      const name = nameParts.join(" ") || tag
+      const api = new GitAPI()
+      if (!api.isConfigured() || !api.hasToken()) { console.log(red("  ✗ Not configured\n")); return }
+      startSpinner("Creating release")
+      const result = await api.createRelease(tag, name, `Release ${tag} created by Stella Coder`)
+      stopSpinner()
+      if (result.success) {
+        console.log(green(`  ✓ Release created: ${result.url}\n`))
+      } else {
+        console.log(red(`  ✗ Failed\n`))
+      }
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  WEB PARSER
+    // ═══════════════════════════════════════════════════
+    case "/fetch": {
+      if (!arg) { console.log(dim("\n  Usage: /fetch <url>\n")); return }
+      console.log()
+      const parser = new WebParser()
+      startSpinner("Fetching page")
+      const result = await parser.fetchAndParse(arg.trim())
+      stopSpinner()
+      if (result.success) {
+        console.log(box([
+          green(`✓ ${result.page.title || "No title"}`),
+          dim(`URL: ${result.page.url}`),
+          dim(`Length: ${result.page.text?.length || 0} chars`),
+          "",
+          result.page.text?.slice(0, 500) || "No text content",
+          result.page.text?.length > 500 ? dim("\n... (truncated)") : "",
+        ], { title: "🌐 Fetched Page", color: cyan, padding: 2 }))
+      } else {
+        console.log(red(`  ✗ ${result.error}\n`))
+      }
+      console.log()
+      return
+    }
+
+    case "/fetch-text": {
+      if (!arg) { console.log(dim("\n  Usage: /fetch-text <url>\n")); return }
+      const parser = new WebParser()
+      const result = await parser.fetchAndParse(arg.trim())
+      if (result.success) {
+        console.log(result.page.text || "No text")
+      } else {
+        console.log(red(`  ✗ ${result.error}`))
+      }
+      console.log()
+      return
+    }
+
+    case "/fetch-links": {
+      if (!arg) { console.log(dim("\n  Usage: /fetch-links <url>\n")); return }
+      const parser = new WebParser()
+      const result = await parser.fetchAndParse(arg.trim())
+      if (result.success && result.page.links?.length > 0) {
+        console.log(box(result.page.links.slice(0, 30).map(l => cyan(l.text.slice(0, 50)) + dim(` → ${l.href}`)), { title: `🔗 Links (${result.page.links.length})`, color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No links found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/fetch-images": {
+      if (!arg) { console.log(dim("\n  Usage: /fetch-images <url>\n")); return }
+      const parser = new WebParser()
+      const result = await parser.fetchAndParse(arg.trim())
+      if (result.success && result.page.images?.length > 0) {
+        console.log(box(result.page.images.slice(0, 20).map(i => {
+          const src = i.src?.length > 80 ? i.src.slice(0, 80) + "..." : i.src
+          return violet(src) + dim(` alt="${i.alt || ""}"`)
+        }), { title: `🖼️ Images (${result.page.images.length})`, color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No images found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/fetch-forms": {
+      if (!arg) { console.log(dim("\n  Usage: /fetch-forms <url>\n")); return }
+      const parser = new WebParser()
+      const result = await parser.fetchAndParse(arg.trim())
+      if (result.success && result.page.forms?.length > 0) {
+        console.log(box(result.page.forms.map((f, i) => [
+          violet(`Form ${i + 1}: ${f.method} ${f.action}`),
+          ...f.fields.map(field => dim(`  ${field.name || field.type}: ${field.placeholder || ""}`)),
+        ].join("\n")), { title: `📝 Forms (${result.page.forms.length})`, color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No forms found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/fetch-seo": {
+      if (!arg) { console.log(dim("\n  Usage: /fetch-seo <url>\n")); return }
+      console.log()
+      const parser = new WebParser()
+      const result = await parser.fetchAndParse(arg.trim())
+      if (!result.success) { console.log(red(`  ✗ ${result.error}\n`)); return }
+      const seo = parser.analyzeSEO(result.page)
+      console.log(box([
+        `Score: ${seo.score}/100`,
+        "",
+        ...seo.checks.map(c => `${c.pass ? green("✓") : red("✗")} ${c.label}: ${dim(c.detail)}`),
+        "",
+        ...seo.recommendations.map(r => dim(`• ${r}`)),
+      ], { title: `🔍 SEO Analysis`, color: seo.score >= 70 ? green : yellow, padding: 2 }))
+      console.log()
+      return
+    }
+
+    case "/web-search": {
+      if (!arg) { console.log(dim("\n  Usage: /web-search <query>\n")); return }
+      console.log()
+      const parser = new WebParser()
+      startSpinner("Searching")
+      const results = await parser.search(arg.trim())
+      stopSpinner()
+      if (results.length > 0) {
+        console.log(box(results.slice(0, 8).map((r, i) => [
+          violet(`${i + 1}. `) + white(r.title),
+          dim(`   ${r.url}`),
+          dim(`   ${r.snippet?.slice(0, 100) || ""}`),
+        ].join("\n")), { title: `🔍 Search Results (${results.length})`, color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No results found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/web-batch": {
+      if (!arg) { console.log(dim("\n  Usage: /web-batch <url1> <url2> ...\n")); return }
+      const urls = arg.split(/\s+/).filter(Boolean)
+      console.log()
+      const parser = new WebParser()
+      startSpinner(`Fetching ${urls.length} pages`)
+      const results = await parser.batchFetch(urls)
+      stopSpinner()
+      const ok = results.filter(r => r.success)
+      const fail = results.filter(r => !r.success)
+      console.log(box([
+        green(`✓ Fetched: ${ok.length}`),
+        fail.length > 0 ? red(`✗ Failed: ${fail.length}`) : "",
+        "",
+        ...ok.map(r => dim(`• ${r.page?.title || r.page?.url}`)),
+      ].filter(Boolean), { title: "📦 Batch Fetch", color: cyan, padding: 2 }))
       console.log()
       return
     }
