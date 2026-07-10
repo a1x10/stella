@@ -41,7 +41,7 @@ import {
   generateAdminCode, listAuthorizedUsers,
 } from "./telegram-bot.mjs"
 
-const VERSION = "5.1.0"
+const VERSION = "5.1.1"
 const CONFIG_DIR = path.join(os.homedir(), ".stella")
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json")
 const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
