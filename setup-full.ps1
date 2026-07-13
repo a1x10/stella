@@ -12,8 +12,12 @@ Write-Host ""
 
 # Step 1: Set execution policy
 Write-Host "  [1/5] Setting execution policy..." -ForegroundColor Yellow
-Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
-Write-Host "  [OK] Execution policy set" -ForegroundColor Green
+try {
+    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop
+} catch {
+    # Policy already set at Machine level, that's fine
+}
+Write-Host "  [OK] Execution policy ready" -ForegroundColor Green
 
 # Step 2: Download Node.js
 Write-Host "  [2/5] Downloading Node.js $nodeVer..." -ForegroundColor Yellow
@@ -50,6 +54,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  [OK] stella-coder installed" -ForegroundColor Green
 
+# Remove .ps1 wrapper so PowerShell uses .cmd instead
+$stellaPs1 = "$nodePath\stella.ps1"
+if (Test-Path $stellaPs1) { 
+    Remove-Item $stellaPs1 -Force -ErrorAction SilentlyContinue
+    Write-Host "  [OK] Removed stella.ps1 wrapper (use stella.cmd)" -ForegroundColor Green
+}
+
 # Step 5: Create desktop shortcut
 Write-Host "  [5/5] Creating desktop shortcut..." -ForegroundColor Yellow
 $ws = New-Object -ComObject WScript.Shell
@@ -70,4 +81,4 @@ Write-Host "  Or double-click 'Stella Coder' on Desktop" -ForegroundColor Cyan
 Write-Host ""
 
 # Launch stella
-& "$nodePath\node.exe" "$nodePath\node_modules\stella-coder\stella-cli\index.mjs"
+& "$nodePath\stella.cmd"

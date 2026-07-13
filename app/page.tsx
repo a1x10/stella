@@ -536,7 +536,7 @@ export default function SalesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-[#64748b] text-sm mb-2">Stella Coder</p>
-                <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs">cmd /c stella</code>
+                <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs">stella.cmd</code>
               </div>
               <div>
                 <p className="text-[#64748b] text-sm mb-2">Stella Antivirus</p>
