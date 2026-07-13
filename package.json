@@ -1,6 +1,6 @@
 {
   "name": "stella-coder",
-  "version": "5.2.1",
+  "version": "5.3.0",
   "private": false,
   "description": "Stella Coder 5.0 — AI coding agent with Telegram bot, huge context, TDD, Git ecosystem, presentations, computer control, smart home, Office automation, and antivirus",
   "main": "stella-cli/index.mjs",

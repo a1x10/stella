@@ -26,6 +26,13 @@ import { ScreenMonitor } from "./screen-monitor.mjs"
 import { ChromeBrowser } from "./browser-control.mjs"
 import { GitAPI } from "./git-api.mjs"
 import { WebParser } from "./web-parser.mjs"
+import { GmailClient } from "./gmail.mjs"
+import { ChartGenerator } from "./charts.mjs"
+import { YandexMaps } from "./yandex-maps.mjs"
+import { GameEngine } from "./game-engine.mjs"
+import { GDriveBackup } from "./gdrive-backup.mjs"
+import { ADB } from "./adb.mjs"
+import { HomeAssistant } from "./home-assistant.mjs"
 import {
   buildRepoMap, buildProjectContext, compressContext,
   loadSpec, generateSpecTemplate,
@@ -692,6 +699,78 @@ const COMMANDS = [
   ["/web-search", "поиск в интернете"],
   ["/web-batch", "загрузить несколько страниц"],
 
+  // Gmail
+  ["/gmail-setup", "настроить Gmail API (OAuth2)"],
+  ["/gmail-auth", "завершить OAuth2 авторизацию"],
+  ["/gmail-send", "отправить email"],
+  ["/gmail-inbox", "последние письма"],
+  ["/gmail-search", "поиск писем"],
+  ["/gmail-read", "прочитать письмо"],
+  ["/gmail-labels", "список меток"],
+  ["/gmail-read-all", "пометить все прочитанным"],
+
+  // Charts
+  ["/chart-bar", "столбчатая диаграмма"],
+  ["/chart-line", "линейный график"],
+  ["/chart-pie", "круговая диаграмма"],
+  ["/chart-doughnut", "кольцевая диаграмма"],
+  ["/chart-radar", "лепестковая диаграмма"],
+  ["/chart-scatter", "точечный график"],
+  ["/chart-csv", "график из CSV файла"],
+  ["/chart-list", "список сохранённых графиков"],
+
+  // Yandex Maps
+  ["/ymaps-key", "установить API ключ Яндекс.Карт"],
+  ["/ymaps-geo", "геокодирование (адрес → координаты)"],
+  ["/ymaps-show", "показать место на карте"],
+  ["/ymaps-route", "маршрут от A до B"],
+  ["/ymaps-places", "показать несколько мест"],
+  ["/ymaps-static", "скачать статическую карту"],
+
+  // Games
+  ["/snake", "игра Змейка"],
+  ["/tetris", "игра Тетрис"],
+  ["/minesweeper", "игра Сапёр"],
+  ["/2048", "игра 2048"],
+  ["/flappy", "игра Flappy Bird"],
+  ["/tictactoe", "Крестики-нолики"],
+  ["/sudoku", "игра Судоку"],
+
+  // Google Drive Backup
+  ["/gdrive-setup", "настроить Google Drive API"],
+  ["/gdrive-auth", "завершить OAuth2 авторизацию"],
+  ["/gdrive-backup", "создать бэкап проекта"],
+  ["/gdrive-list", "список файлов на Drive"],
+  ["/gdrive-quota", "использовано места"],
+  ["/gdrive-search", "поиск файлов"],
+  ["/gdrive-history", "история бэкапов"],
+
+  // ADB
+  ["/adb-devices", "список устройств"],
+  ["/adb-info", "информация об устройстве"],
+  ["/adb-screenshot", "скриншот телефона"],
+  ["/adb-shell", "выполнить shell команду"],
+  ["/adb-tap", "тап по координатам"],
+  ["/adb-swipe", "свайп"],
+  ["/adb-type", "набрать текст"],
+  ["/adb-battery", "информация о батарее"],
+  ["/adb-install", "установить APK"],
+  ["/adb-packages", "список пакетов"],
+
+  // Home Assistant
+  ["/ha-setup", "настроить Home Assistant"],
+  ["/ha-status", "статус HA"],
+  ["/ha-states", "все состояния"],
+  ["/ha-lights", "спискок лампочек"],
+  ["/ha-sensors", "список сенсоров"],
+  ["/ha-toggle", "переключить устройство"],
+  ["/ha-on", "включить"],
+  ["/ha-off", "выключить"],
+  ["/ha-climate", "информация о климате"],
+  ["/ha-media", "список медиа-плееров"],
+  ["/ha-volume", "громкость"],
+  ["/ha-cover", "управление шторами/воротами"],
+
   // Управление компьютером
   ["/open", "открыть приложение/файл/URL"],
   ["/app", "запустить приложение"],
@@ -821,6 +900,13 @@ async function handleCommand(line) {
         ["🌐 Browser Control", ["/browser", "/browser-click", "/browser-type", "/browser-scroll", "/browser-screenshot", "/browser-links", "/browser-forms", "/browser-close"]],
         ["🔗 Git API", ["/git-issues", "/git-issue", "/git-prs", "/git-pr-create", "/git-pr-review", "/git-pr-merge", "/git-branches", "/git-releases", "/git-release"]],
         ["🔍 Web Parser", ["/fetch", "/fetch-text", "/fetch-links", "/fetch-images", "/fetch-forms", "/fetch-seo", "/web-search", "/web-batch"]],
+        ["📧 Gmail", ["/gmail-setup", "/gmail-auth", "/gmail-send", "/gmail-inbox", "/gmail-search", "/gmail-read", "/gmail-labels", "/gmail-read-all"]],
+        ["📊 Charts", ["/chart-bar", "/chart-line", "/chart-pie", "/chart-doughnut", "/chart-radar", "/chart-scatter", "/chart-csv", "/chart-list"]],
+        ["🗺️ Яндекс.Карты", ["/ymaps-key", "/ymaps-geo", "/ymaps-show", "/ymaps-route", "/ymaps-places", "/ymaps-static"]],
+        ["🎮 Игры", ["/snake", "/tetris", "/minesweeper", "/2048", "/flappy", "/tictactoe", "/sudoku"]],
+        ["💾 Google Drive", ["/gdrive-setup", "/gdrive-auth", "/gdrive-backup", "/gdrive-list", "/gdrive-quota", "/gdrive-search", "/gdrive-history"]],
+        ["📱 ADB", ["/adb-devices", "/adb-info", "/adb-screenshot", "/adb-shell", "/adb-tap", "/adb-swipe", "/adb-type", "/adb-battery", "/adb-install", "/adb-packages"]],
+        ["🏠 Home Assistant", ["/ha-setup", "/ha-status", "/ha-states", "/ha-lights", "/ha-sensors", "/ha-toggle", "/ha-on", "/ha-off", "/ha-climate", "/ha-media", "/ha-volume", "/ha-cover"]],
         ["⚙️ Настройки", ["/help", "/model", "/clear", "/compact", "/cost", "/context", "/config", "/version", "/login", "/newkey", "/doctor", "/sessions", "/color", "/lang", "/shortcut"]],
       ]
       for (const [cat, cmds] of categories) {
@@ -4282,6 +4368,843 @@ If everything looks normal, set severity to "none" and issues to [].`
         ...ok.map(r => dim(`• ${r.page?.title || r.page?.url}`)),
       ].filter(Boolean), { title: "📦 Batch Fetch", color: cyan, padding: 2 }))
       console.log()
+      return
+    }
+
+
+    // ═══════════════════════════════════════════════════
+    //  GMAIL
+    // ═══════════════════════════════════════════════════
+    case "/gmail-setup": {
+      console.log()
+      const gmail = new GmailClient()
+      const url = gmail.getSetupURL()
+      if (!url) {
+        console.log(box([
+          yellow("Требуется файл credentials.json"),
+          "",
+          dim("1. Создай проект в https://console.cloud.google.com"),
+          dim("2. Включи Gmail API"),
+          dim("3. Скачай credentials.json (OAuth 2.0 Client ID)"),
+          dim("4. Сохрани в ~/.stella/gmail/credentials.json"),
+        ], { title: "📧 Gmail Setup", color: yellow, padding: 2 }))
+      } else {
+        console.log(box([
+          green("Перейди по ссылке и авторизуйся:"),
+          "",
+          cyan(url),
+          "",
+          dim("После авторизации введи код:"),
+          dim("  /gmail-auth <code>"),
+        ], { title: "📧 Gmail OAuth2", color: cyan, padding: 2 }))
+      }
+      console.log()
+      return
+    }
+
+    case "/gmail-auth": {
+      if (!arg) { console.log(dim("\n  Usage: /gmail-auth <code>\n")); return }
+      const gmail = new GmailClient()
+      const result = await gmail.completeAuth(arg.trim())
+      if (result.success) console.log(green("  ✓ Gmail авторизован!\n"))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/gmail-send": {
+      if (!arg) { console.log(dim("\n  Usage: /gmail-send <to> | <subject> | <body>\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const [to, subject = "(no subject)", ...bodyParts] = parts
+      const body = bodyParts.join("|")
+      const gmail = new GmailClient()
+      startSpinner("Sending email")
+      const result = await gmail.sendEmail({ to, subject, body, isHtml: body.includes("<") })
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ Email sent: ${result.messageId}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/gmail-inbox": {
+      console.log()
+      const gmail = new GmailClient()
+      startSpinner("Fetching inbox")
+      const result = await gmail.listMessages({ labelIds: ["INBOX"] })
+      stopSpinner()
+      if (result.success && result.messages.length > 0) {
+        console.log(box(result.messages.slice(0, 10).map(m =>
+          `${m.from?.match(/<?(\S+@\S+)/)?.[1] || m.from}  ${violet(m.subject?.slice(0, 40))}  ${dim(m.date?.slice(0, 16) || "")}`
+        ), { title: `📧 Inbox (${result.messages.length})`, color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No messages\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/gmail-search": {
+      if (!arg) { console.log(dim("\n  Usage: /gmail-search <query>\n")); return }
+      console.log()
+      const gmail = new GmailClient()
+      startSpinner("Searching")
+      const result = await gmail.searchMessages(arg.trim())
+      stopSpinner()
+      if (result.success && result.messages.length > 0) {
+        console.log(box(result.messages.slice(0, 10).map(m =>
+          `${m.from?.match(/<?(\S+@\S+)/)?.[1] || m.from}  ${violet(m.subject?.slice(0, 40))}  ${dim(m.date?.slice(0, 16) || "")}`
+        ), { title: `🔍 Search (${result.messages.length})`, color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No results\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/gmail-read": {
+      if (!arg) { console.log(dim("\n  Usage: /gmail-read <messageId>\n")); return }
+      const gmail = new GmailClient()
+      startSpinner("Reading message")
+      const result = await gmail.getMessage(arg.trim())
+      stopSpinner()
+      if (result.success) {
+        console.log(box([
+          `${violet("From:")} ${result.message.from}`,
+          `${violet("Subject:")} ${result.message.subject}`,
+          `${violet("Date:")} ${result.message.date}`,
+          "",
+          result.message.textBody?.slice(0, 1000) || result.message.snippet || "(no text)",
+        ], { title: "📧 Message", color: cyan, padding: 2 }))
+      } else {
+        console.log(red(`  ✗ ${result.error}\n`))
+      }
+      console.log()
+      return
+    }
+
+    case "/gmail-labels": {
+      console.log()
+      const gmail = new GmailClient()
+      const result = await gmail.listLabels()
+      if (result.success) {
+        console.log(box(result.labels.map(l => `${l.name}`), { title: "🏷️ Labels", color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No labels\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/gmail-read-all": {
+      const gmail = new GmailClient()
+      const result = await gmail.getUnreadCount()
+      if (result === 0) { console.log(green("  ✓ All read\n")); return }
+      console.log(dim(`  Found ${result} unread\n`))
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  CHARTS
+    // ═══════════════════════════════════════════════════
+    case "/chart-bar": {
+      if (!arg) { console.log(dim("\n  Usage: /chart-bar <title> | <label1:val1,label2:val2,...>\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const title = parts[0]
+      const dataParts = (parts[1] || "").split(",").map(p => p.trim()).filter(Boolean)
+      const labels = dataParts.map(p => p.split(":")[0])
+      const data = dataParts.map(p => parseFloat(p.split(":")[1]) || 0)
+      const chart = new ChartGenerator()
+      const result = await chart.bar(title, labels, data)
+      if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
+      return
+    }
+
+    case "/chart-line": {
+      if (!arg) { console.log(dim("\n  Usage: /chart-line <title> | <label1:val1,label2:val2,...>\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const title = parts[0]
+      const dataParts = (parts[1] || "").split(",").map(p => p.trim()).filter(Boolean)
+      const labels = dataParts.map(p => p.split(":")[0])
+      const data = dataParts.map(p => parseFloat(p.split(":")[1]) || 0)
+      const chart = new ChartGenerator()
+      const result = await chart.line(title, labels, [{ label: title, data }])
+      if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
+      return
+    }
+
+    case "/chart-pie": {
+      if (!arg) { console.log(dim("\n  Usage: /chart-pie <title> | <label1:val1,label2:val2,...>\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const title = parts[0]
+      const dataParts = (parts[1] || "").split(",").map(p => p.trim()).filter(Boolean)
+      const labels = dataParts.map(p => p.split(":")[0])
+      const data = dataParts.map(p => parseFloat(p.split(":")[1]) || 0)
+      const chart = new ChartGenerator()
+      const result = await chart.pie(title, labels, data)
+      if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
+      return
+    }
+
+    case "/chart-doughnut": {
+      if (!arg) { console.log(dim("\n  Usage: /chart-doughnut <title> | <label1:val1,...>\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const title = parts[0]
+      const dataParts = (parts[1] || "").split(",").map(p => p.trim()).filter(Boolean)
+      const labels = dataParts.map(p => p.split(":")[0])
+      const data = dataParts.map(p => parseFloat(p.split(":")[1]) || 0)
+      const chart = new ChartGenerator()
+      const result = await chart.doughnut(title, labels, data)
+      if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
+      return
+    }
+
+    case "/chart-radar": {
+      if (!arg) { console.log(dim("\n  Usage: /chart-radar <title> | <label1:val1,...>\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const title = parts[0]
+      const dataParts = (parts[1] || "").split(",").map(p => p.trim()).filter(Boolean)
+      const labels = dataParts.map(p => p.split(":")[0])
+      const data = dataParts.map(p => parseFloat(p.split(":")[1]) || 0)
+      const chart = new ChartGenerator()
+      const result = await chart.radar(title, labels, [{ label: title, data }])
+      if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
+      return
+    }
+
+    case "/chart-scatter": {
+      if (!arg) { console.log(dim("\n  Usage: /chart-scatter <title> | <x1,y1,x2,y2,...>\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const title = parts[0]
+      const nums = (parts[1] || "").split(",").map(parseFloat).filter(n => !isNaN(n))
+      const points = []
+      for (let i = 0; i < nums.length - 1; i += 2) { points.push({ x: nums[i], y: nums[i + 1] }) }
+      const chart = new ChartGenerator()
+      const result = await chart.scatter(title, points)
+      if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
+      return
+    }
+
+    case "/chart-csv": {
+      if (!arg) { console.log(dim("\n  Usage: /chart-csv <path.csv>\n")); return }
+      const chart = new ChartGenerator()
+      const result = await chart.fromCSV(arg.trim())
+      if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/chart-list": {
+      console.log()
+      const chart = new ChartGenerator()
+      const list = chart.listCharts()
+      if (list.length > 0) {
+        console.log(box(list.map(c => `${dim(c.created?.toLocaleString() || "")}  ${violet(c.name)}`), { title: "📊 Charts", color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No charts yet\n"))
+      }
+      console.log()
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  YANDEX MAPS
+    // ═══════════════════════════════════════════════════
+    case "/ymaps-key": {
+      if (!arg) { console.log(dim("\n  Usage: /ymaps-key <api_key>\n")); return }
+      state.config.yandexMapsKey = arg.trim()
+      console.log(green("  ✓ API key set\n"))
+      return
+    }
+
+    case "/ymaps-geo": {
+      if (!arg) { console.log(dim("\n  Usage: /ymaps-geo <address>\n")); return }
+      console.log()
+      const key = state.config.yandexMapsKey || process.env.YANDEX_MAPS_API_KEY
+      const ymaps = new YandexMaps(key)
+      if (!ymaps.isConfigured()) { console.log(yellow("  ⚠ API key not set. Use /ymaps-key <key>\n")); return }
+      startSpinner("Geocoding")
+      const result = await ymaps.geocode(arg.trim())
+      stopSpinner()
+      if (result.success) {
+        console.log(box([
+          `${violet("Name:")} ${result.name}`,
+          `${violet("Address:")} ${result.address || result.description}`,
+          `${violet("Coordinates:")} ${result.coordinates.lat}, ${result.coordinates.lng}`,
+        ], { title: "🗺️ Geocode", color: cyan, padding: 2 }))
+      } else {
+        console.log(red(`  ✗ ${result.error}\n`))
+      }
+      console.log()
+      return
+    }
+
+    case "/ymaps-show": {
+      if (!arg) { console.log(dim("\n  Usage: /ymaps-show <address>\n")); return }
+      console.log()
+      const key = state.config.yandexMapsKey || process.env.YANDEX_MAPS_API_KEY
+      const ymaps = new YandexMaps(key)
+      if (!ymaps.isConfigured()) { console.log(yellow("  ⚠ API key not set\n")); return }
+      startSpinner("Loading map")
+      const result = await ymaps.showLocation(arg.trim())
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ Map: ${result.path}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/ymaps-route": {
+      if (!arg) { console.log(dim("\n  Usage: /ymaps-route <from> | <to>\n")); return }
+      const [from, to] = arg.split("|").map(s => s.trim())
+      if (!from || !to) { console.log(dim("\n  Usage: /ymaps-route <from> | <to>\n")); return }
+      console.log()
+      const key = state.config.yandexMapsKey || process.env.YANDEX_MAPS_API_KEY
+      const ymaps = new YandexMaps(key)
+      if (!ymaps.isConfigured()) { console.log(yellow("  ⚠ API key not set\n")); return }
+      startSpinner("Building route")
+      const result = await ymaps.showRoute(from, to)
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ Route: ${result.path}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/ymaps-places": {
+      if (!arg) { console.log(dim("\n  Usage: /ymaps-places <addr1> | <addr2> | ...\n")); return }
+      const places = arg.split("|").map(s => s.trim()).filter(Boolean)
+      console.log()
+      const key = state.config.yandexMapsKey || process.env.YANDEX_MAPS_API_KEY
+      const ymaps = new YandexMaps(key)
+      if (!ymaps.isConfigured()) { console.log(yellow("  ⚠ API key not set\n")); return }
+      startSpinner("Loading places")
+      const result = await ymaps.showMultiplePlaces(places)
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ Map with ${places.length} places: ${result.path}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/ymaps-static": {
+      if (!arg) { console.log(dim("\n  Usage: /ymaps-static <address>\n")); return }
+      console.log()
+      const key = state.config.yandexMapsKey || process.env.YANDEX_MAPS_API_KEY
+      const ymaps = new YandexMaps(key)
+      if (!ymaps.isConfigured()) { console.log(yellow("  ⚠ API key not set\n")); return }
+      startSpinner("Geocoding")
+      const geo = await ymaps.geocode(arg.trim())
+      stopSpinner()
+      if (!geo.success) { console.log(red(`  ✗ ${geo.error}\n`)); return }
+      startSpinner("Downloading map")
+      const result = await ymaps.getStaticMap({ center: [geo.coordinates.lat, geo.coordinates.lng], zoom: 15, markers: [{ lat: geo.coordinates.lat, lng: geo.coordinates.lng }] })
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ Map saved: ${result.path} (${result.size} bytes)\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  GAMES
+    // ═══════════════════════════════════════════════════
+    case "/snake": {
+      const game = new GameEngine()
+      const result = await game.playSnake()
+      if (result.success) console.log(green(`  ✓ Snake: ${result.path}\n`))
+      return
+    }
+
+    case "/tetris": {
+      const game = new GameEngine()
+      const result = await game.playTetris()
+      if (result.success) console.log(green(`  ✓ Tetris: ${result.path}\n`))
+      return
+    }
+
+    case "/minesweeper": {
+      const game = new GameEngine()
+      const result = await game.playMinesweeper()
+      if (result.success) console.log(green(`  ✓ Minesweeper: ${result.path}\n`))
+      return
+    }
+
+    case "/2048": {
+      const game = new GameEngine()
+      const result = await game.play2048()
+      if (result.success) console.log(green(`  ✓ 2048: ${result.path}\n`))
+      return
+    }
+
+    case "/flappy": {
+      const game = new GameEngine()
+      const result = await game.playFlappyBird()
+      if (result.success) console.log(green(`  ✓ Flappy Bird: ${result.path}\n`))
+      return
+    }
+
+    case "/tictactoe": {
+      const game = new GameEngine()
+      const result = await game.playTicTacToe()
+      if (result.success) console.log(green(`  ✓ Tic Tac Toe: ${result.path}\n`))
+      return
+    }
+
+    case "/sudoku": {
+      const game = new GameEngine()
+      const result = await game.playSudoku()
+      if (result.success) console.log(green(`  ✓ Sudoku: ${result.path}\n`))
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  GOOGLE DRIVE BACKUP
+    // ═══════════════════════════════════════════════════
+    case "/gdrive-setup": {
+      console.log()
+      const gdrive = new GDriveBackup()
+      const url = gdrive.getSetupURL()
+      if (!url) {
+        console.log(box([
+          yellow("Требуется credentials.json"),
+          "",
+          dim("1. https://console.cloud.google.com"),
+          dim("2. Включи Google Drive API"),
+          dim("3. Скачай credentials.json (OAuth 2.0)"),
+          dim("4. Сохрани в ~/.stella/gdrive/credentials.json"),
+        ], { title: "💾 Google Drive Setup", color: yellow, padding: 2 }))
+      } else {
+        console.log(box([
+          green("Перейди по ссылке и авторизуйся:"), "",
+          cyan(url), "",
+          dim("После авторизации введи код:"),
+          dim("  /gdrive-auth <code>"),
+        ], { title: "💾 GDrive OAuth2", color: cyan, padding: 2 }))
+      }
+      console.log()
+      return
+    }
+
+    case "/gdrive-auth": {
+      if (!arg) { console.log(dim("\n  Usage: /gdrive-auth <code>\n")); return }
+      const gdrive = new GDriveBackup()
+      const result = await gdrive.completeAuth(arg.trim())
+      if (result.success) console.log(green("  ✓ Google Drive авторизован!\n"))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/gdrive-backup": {
+      if (!arg) { console.log(dim("\n  Usage: /gdrive-backup <path> [name]\n")); return }
+      const parts = arg.split("|").map(s => s.trim())
+      const targetPath = parts[0]
+      const name = parts[1] || `backup_${path.basename(targetPath)}`
+      if (!fs.existsSync(targetPath)) { console.log(red(`  ✗ Path not found: ${targetPath}\n`)); return }
+      const gdrive = new GDriveBackup()
+      startSpinner("Backing up")
+      const result = await gdrive.backupProject(targetPath, name)
+      stopSpinner()
+      if (result.success) {
+        const size = result.size ? ` (${(result.size / 1024 / 1024).toFixed(2)} MB)` : ""
+        console.log(green(`  ✓ Backup "${name}" uploaded${size}\n`))
+      } else {
+        console.log(red(`  ✗ ${result.error}\n`))
+      }
+      return
+    }
+
+    case "/gdrive-list": {
+      console.log()
+      const gdrive = new GDriveBackup()
+      startSpinner("Fetching files")
+      const result = await gdrive.listBackups()
+      stopSpinner()
+      if (result.success && result.files.length > 0) {
+        console.log(box(result.files.slice(0, 20).map(f =>
+          `${violet(f.name)}  ${dim(new Date(f.created).toLocaleDateString())}  ${dim((f.size / 1024 / 1024).toFixed(1) + " MB")}`
+        ), { title: "💾 Google Drive Files", color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No files found\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/gdrive-quota": {
+      console.log()
+      const gdrive = new GDriveBackup()
+      const result = await gdrive.getQuota()
+      if (result.success) {
+        const pct = result.limit > 0 ? ((result.used / result.limit) * 100).toFixed(1) : "?"
+        console.log(box([
+          `${green("Used:")}  ${result.usedFormatted}`,
+          `${yellow("Limit:")} ${result.limitFormatted}`,
+          `${violet("Usage:")} ${pct}%`,
+        ], { title: "💾 Storage Quota", color: cyan, padding: 2 }))
+      }
+      console.log()
+      return
+    }
+
+    case "/gdrive-search": {
+      if (!arg) { console.log(dim("\n  Usage: /gdrive-search <query>\n")); return }
+      console.log()
+      const gdrive = new GDriveBackup()
+      startSpinner("Searching")
+      const result = await gdrive.searchFiles(arg.trim())
+      stopSpinner()
+      if (result.success && result.files.length > 0) {
+        console.log(box(result.files.map(f => `${violet(f.name)} (${f.id})`), { title: "🔍 Search", color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No results\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/gdrive-history": {
+      console.log()
+      const gdrive = new GDriveBackup()
+      const history = gdrive.getHistory()
+      if (history.length > 0) {
+        console.log(box(history.slice(-10).reverse().map(h =>
+          `${dim(new Date(h.date).toLocaleString())}  ${violet(h.name)}  ${dim((h.size / 1024 / 1024).toFixed(1) + " MB")}`
+        ), { title: "📋 Backup History", color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No backup history\n"))
+      }
+      console.log()
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  ADB (ANDROID DEBUG BRIDGE)
+    // ═══════════════════════════════════════════════════
+    case "/adb-devices": {
+      console.log()
+      const adb = new ADB()
+      if (!adb.isAvailable()) { console.log(yellow("  ⚠ ADB not found. Install Android SDK platform-tools\n")); return }
+      const result = adb.getDevices()
+      if (result.success && result.devices.length > 0) {
+        console.log(box(result.devices.map(d => `${d.status === "device" ? green("✓") : yellow("?")} ${d.id} (${d.status})`), { title: "📱 ADB Devices", color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No devices connected\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/adb-info": {
+      console.log()
+      const adb = new ADB()
+      if (!adb.isAvailable()) { console.log(yellow("  ⚠ ADB not found\n")); return }
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      if (!serial) { console.log(dim("  No device connected\n")); return }
+      const info = adb.getInfo(serial)
+      if (info.success) {
+        console.log(box([
+          `${violet("Model:")} ${info.model}`,
+          `${violet("Brand:")} ${info.brand}`,
+          `${violet("Android:")} ${info.android} (SDK ${info.sdk})`,
+          `${violet("Resolution:")} ${info.resolution}`,
+          `${violet("Density:")} ${info.density}`,
+        ], { title: `📱 ${serial}`, color: cyan, padding: 2 }))
+      }
+      console.log()
+      return
+    }
+
+    case "/adb-screenshot": {
+      const adb = new ADB()
+      if (!adb.isAvailable()) { console.log(yellow("  ⚠ ADB not found\n")); return }
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      startSpinner("Taking screenshot")
+      const result = adb.screenshot(serial)
+      stopSpinner()
+      if (result.success) console.log(green(`  ✓ Screenshot: ${result.path}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/adb-shell": {
+      if (!arg) { console.log(dim("\n  Usage: /adb-shell <command>\n")); return }
+      const adb = new ADB()
+      if (!adb.isAvailable()) { console.log(yellow("  ⚠ ADB not found\n")); return }
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      const result = adb.shell(serial, arg.trim())
+      if (result.success) console.log(result.output + "\n")
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/adb-tap": {
+      if (!arg) { console.log(dim("\n  Usage: /adb-tap <x> <y>\n")); return }
+      const [x, y] = arg.split(" ").map(parseFloat)
+      if (isNaN(x) || isNaN(y)) { console.log(dim("\n  Usage: /adb-tap <x> <y>\n")); return }
+      const adb = new ADB()
+      if (!adb.isAvailable()) { console.log(yellow("  ⚠ ADB not found\n")); return }
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      const result = adb.tap(serial, x, y)
+      if (result.success) console.log(green(`  ✓ Tapped at (${x}, ${y})\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/adb-swipe": {
+      if (!arg) { console.log(dim("\n  Usage: /adb-swipe <x1> <y1> <x2> <y2>\n")); return }
+      const [x1, y1, x2, y2] = arg.split(" ").map(parseFloat)
+      if ([x1, y1, x2, y2].some(n => isNaN(n))) { console.log(dim("\n  Usage: /adb-swipe <x1> <y1> <x2> <y2>\n")); return }
+      const adb = new ADB()
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      const result = adb.swipe(serial, x1, y1, x2, y2)
+      if (result.success) console.log(green("  ✓ Swiped\n"))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/adb-type": {
+      if (!arg) { console.log(dim("\n  Usage: /adb-type <text>\n")); return }
+      const adb = new ADB()
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      const result = adb.text(serial, arg)
+      if (result.success) console.log(green(`  ✓ Typed "${arg.slice(0, 30)}"\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/adb-battery": {
+      console.log()
+      const adb = new ADB()
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      if (!serial) { console.log(dim("  No device\n")); return }
+      const result = adb.getBattery(serial)
+      if (result.success) {
+        console.log(box([
+          `${green("Level:")} ${result.level}%`,
+          `${yellow("Temperature:")} ${result.temperature}°C`,
+          `${violet("Status:")} ${result.status}`,
+        ], { title: "🔋 Battery", color: cyan, padding: 2 }))
+      }
+      console.log()
+      return
+    }
+
+    case "/adb-install": {
+      if (!arg) { console.log(dim("\n  Usage: /adb-install <path.apk>\n")); return }
+      if (!fs.existsSync(arg.trim())) { console.log(red(`  ✗ File not found: ${arg.trim()}\n`)); return }
+      const adb = new ADB()
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      startSpinner("Installing")
+      const result = adb.installApp(serial, arg.trim())
+      stopSpinner()
+      if (result.success) console.log(green("  ✓ Installed\n"))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/adb-packages": {
+      console.log()
+      const adb = new ADB()
+      const devices = adb.getDevices()
+      const serial = devices.success && devices.devices[0]?.id
+      if (!serial) { console.log(dim("  No device\n")); return }
+      const filter = arg || ""
+      const result = adb.listPackages(serial, filter)
+      if (result.success && result.packages.length > 0) {
+        console.log(box(result.packages.slice(0, 30).map(p => dim(p)), { title: `📦 Packages (${result.packages.length})`, color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No packages\n"))
+      }
+      console.log()
+      return
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  HOME ASSISTANT
+    // ═══════════════════════════════════════════════════
+    case "/ha-setup": {
+      if (!arg) { console.log(dim("\n  Usage: /ha-setup <url> | <token>\n")); return }
+      const [url, token] = arg.split("|").map(s => s.trim())
+      if (!url || !token) { console.log(dim("\n  Usage: /ha-setup <url> | <token>\n")); return }
+      const ha = new HomeAssistant(url, token)
+      startSpinner("Connecting")
+      const ping = await ha.ping()
+      stopSpinner()
+      if (ping.success) {
+        ha.configure(url, token)
+        console.log(green("  ✓ Home Assistant configured!\n"))
+      } else {
+        console.log(red(`  ✗ Connection failed\n`))
+      }
+      return
+    }
+
+    case "/ha-status": {
+      console.log()
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured. Use /ha-setup\n")); return }
+      startSpinner("Getting info")
+      const info = await ha.getAutoInfo()
+      stopSpinner()
+      if (info.success) {
+        console.log(box([
+          `${violet("HA Version:")} ${info.haVersion || "?"}`,
+          `${violet("Location:")} ${info.locationName || "?"}`,
+          `${violet("Timezone:")} ${info.timezone || "?"}`,
+        ], { title: "🏠 Home Assistant", color: cyan, padding: 2 }))
+      } else {
+        console.log(red(`  ✗ ${info.error}\n`))
+      }
+      console.log()
+      return
+    }
+
+    case "/ha-states": {
+      console.log()
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      startSpinner("Fetching states")
+      const result = await ha.getStates()
+      stopSpinner()
+      if (result.success) {
+        const entries = result.data.map(s => `${s.state === "on" ? green("●") : s.state === "off" ? red("●") : dim("○")} ${dim(s.entity_id)}: ${white(s.state)}`)
+        console.log(box(entries.slice(0, 25), { title: `🏠 States (${result.data.length})`, color: cyan, padding: 2 }))
+        if (result.data.length > 25) console.log(dim(`  ... and ${result.data.length - 25} more\n`))
+      }
+      console.log()
+      return
+    }
+
+    case "/ha-lights": {
+      console.log()
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.getLights()
+      if (result.success && result.lights.length > 0) {
+        console.log(box(result.lights.map(l =>
+          `${l.state === "on" ? green("●") : red("●")} ${l.friendlyName || l.entity} ${dim(l.brightness ? `(${Math.round(l.brightness / 2.55)}%)` : "")}`
+        ), { title: `💡 Lights (${result.lights.length})`, color: yellow, padding: 2 }))
+      } else {
+        console.log(dim("  No lights\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/ha-sensors": {
+      console.log()
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.getSensors()
+      if (result.success && result.sensors.length > 0) {
+        console.log(box(result.sensors.slice(0, 20).map(s =>
+          `${s.friendlyName || s.entity}: ${white(s.state)} ${dim(s.unit || "")}`
+        ), { title: `📡 Sensors (${result.sensors.length})`, color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No sensors\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/ha-toggle": {
+      if (!arg) { console.log(dim("\n  Usage: /ha-toggle <entity_id>\n")); return }
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.toggle(arg.trim())
+      if (result.success) console.log(green(`  ✓ Toggled ${arg.trim()}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/ha-on": {
+      if (!arg) { console.log(dim("\n  Usage: /ha-on <entity_id>\n")); return }
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.turnOn(arg.trim())
+      if (result.success) console.log(green(`  ✓ Turned on ${arg.trim()}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/ha-off": {
+      if (!arg) { console.log(dim("\n  Usage: /ha-off <entity_id>\n")); return }
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.turnOff(arg.trim())
+      if (result.success) console.log(green(`  ✓ Turned off ${arg.trim()}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/ha-climate": {
+      console.log()
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.getClimate()
+      if (result.success && result.devices.length > 0) {
+        console.log(box(result.devices.map(c =>
+          `${c.friendlyName || c.entity}: ${c.state} ${dim(c.currentTemp ? `(${c.currentTemp}°C → ${c.temp}°C)` : "")}`
+        ), { title: "🌡️ Climate", color: cyan, padding: 2 }))
+      } else {
+        console.log(dim("  No climate devices\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/ha-media": {
+      console.log()
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.getMediaPlayers()
+      if (result.success && result.players.length > 0) {
+        console.log(box(result.players.map(p =>
+          `${p.state === "playing" ? green("▶") : p.state === "paused" ? yellow("⏸") : dim("⏹")} ${p.friendlyName || p.entity} ${dim(p.volume ? `(${Math.round(p.volume * 100)}%)` : "")}`
+        ), { title: "📺 Media Players", color: violet, padding: 2 }))
+      } else {
+        console.log(dim("  No media players\n"))
+      }
+      console.log()
+      return
+    }
+
+    case "/ha-volume": {
+      if (!arg) { console.log(dim("\n  Usage: /ha-volume <entity_id> | <level 0-100>\n")); return }
+      const [entity, levelStr] = arg.split("|").map(s => s.trim())
+      const level = parseFloat(levelStr) / 100
+      if (isNaN(level)) { console.log(dim("\n  Usage: /ha-volume <entity_id> | <level 0-100>\n")); return }
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const result = await ha.setVolume(entity, level)
+      if (result.success) console.log(green(`  ✓ Volume set to ${levelStr}%\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
+      return
+    }
+
+    case "/ha-cover": {
+      if (!arg) { console.log(dim("\n  Usage: /ha-cover <entity_id> | <open|close|stop|position>\n")); return }
+      const [entityId, action] = arg.split("|").map(s => s.trim())
+      const ha = new HomeAssistant()
+      if (!ha.isConfigured()) { console.log(yellow("  ⚠ Not configured\n")); return }
+      const actions = { open: () => ha.openCover(entityId), close: () => ha.closeCover(entityId), stop: () => ha.stopCover(entityId) }
+      const fn = actions[action]
+      if (!fn) {
+        const pos = parseInt(action)
+        if (!isNaN(pos)) {
+          const result = await ha.setCoverPosition(entityId, pos)
+          if (result.success) console.log(green(`  ✓ Cover position set to ${pos}%\n`))
+          else console.log(red(`  ✗ ${result.error}\n`))
+          return
+        }
+        console.log(dim("\n  Usage: /ha-cover <entity_id> | <open|close|stop|0-100>\n")); return
+      }
+      const result = await fn()
+      if (result.success) console.log(green(`  ✓ Cover ${action}: ${entityId}\n`))
+      else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
 
