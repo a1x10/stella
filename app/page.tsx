@@ -267,7 +267,7 @@ export default function SalesPage() {
           <div className="mt-8 flex flex-col items-center gap-4">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10">
               <span className="text-[#64748b] font-mono text-sm">PS&gt;</span>
-              <code className="text-[#22c55e] font-mono text-sm">npm install -g stella-coder</code>
+              <code className="text-[#22c55e] font-mono text-sm">cmd /c npm install -g stella-coder</code>
             </div>
             <div className="flex gap-3 flex-wrap justify-center">
               <a href="https://github.com/a1x10/stella/releases/download/v5.3.1/setup-full.bat" className="px-4 py-2 bg-[#22c55e]/10 border border-[#22c55e]/30 rounded-lg text-[#22c55e] font-mono text-xs hover:bg-[#22c55e]/20 transition-colors">
@@ -501,11 +501,11 @@ export default function SalesPage() {
               <div className="space-y-3">
                 <div>
                   <p className="text-[#64748b] text-sm mb-2">npm (requires Node.js)</p>
-                  <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs break-all">npm install -g stella-coder</code>
+                  <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs break-all">cmd /c npm install -g stella-coder</code>
                 </div>
                 <div>
                   <p className="text-[#64748b] text-sm mb-2">PowerShell one-liner (auto-downloads Node.js)</p>
-                  <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs break-all">iwr -Uri "https://github.com/a1x10/stella/releases/download/v5.3.1/setup-full.bat" -OutFile "$env:TEMP\install.bat"; &amp; $env:TEMP\install.bat</code>
+                  <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs break-all">iwr -Uri "https://github.com/a1x10/stella/releases/download/v5.3.1/setup-full.bat" -OutFile "$env:TEMP\install.bat"; cmd /c $env:TEMP\install.bat</code>
                 </div>
                 <div>
                   <p className="text-[#64748b] text-sm mb-2">Direct download</p>
@@ -520,7 +520,7 @@ export default function SalesPage() {
               <div className="space-y-3">
                 <div>
                   <p className="text-[#64748b] text-sm mb-2">PowerShell one-liner</p>
-                  <code className="block p-3 bg-black/50 rounded-lg text-[#f38ba8] font-mono text-xs break-all">iwr -Uri "https://github.com/a1x10/stella/releases/download/v5.3.1/setup-antivirus.bat" -OutFile "$env:TEMP\av.bat"; &amp; $env:TEMP\av.bat</code>
+                  <code className="block p-3 bg-black/50 rounded-lg text-[#f38ba8] font-mono text-xs break-all">iwr -Uri "https://github.com/a1x10/stella/releases/download/v5.3.1/setup-antivirus.bat" -OutFile "$env:TEMP\av.bat"; cmd /c $env:TEMP\av.bat</code>
                 </div>
                 <div>
                   <p className="text-[#64748b] text-sm mb-2">Direct download</p>
@@ -536,11 +536,11 @@ export default function SalesPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-[#64748b] text-sm mb-2">Stella Coder</p>
-                <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs">stella</code>
+                <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs">cmd /c stella</code>
               </div>
               <div>
                 <p className="text-[#64748b] text-sm mb-2">Stella Antivirus</p>
-                <code className="block p-3 bg-black/50 rounded-lg text-[#f38ba8] font-mono text-xs break-all">&amp; "$env:USERPROFILE\StellaAV\index.mjs"</code>
+                <code className="block p-3 bg-black/50 rounded-lg text-[#f38ba8] font-mono text-xs break-all">cmd /c "node %USERPROFILE%\StellaAV\index.mjs"</code>
               </div>
             </div>
           </div>

@@ -61,5 +61,5 @@ echo   Or double-click "Stella Coder" on Desktop
 echo.
 
 :: Launch stella
-stella
+"%NODEPATH%\node.exe" "%NODEPATH%\node_modules\stella-coder\stella-cli\index.mjs"
 pause
