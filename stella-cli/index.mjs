@@ -52,7 +52,7 @@ import {
   generateAdminCode, listAuthorizedUsers,
 } from "./telegram-bot.mjs"
 
-const VERSION = "5.2.0"
+const VERSION = "5.3.4"
 const CONFIG_DIR = path.join(os.homedir(), ".stella")
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json")
 const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
@@ -299,12 +299,21 @@ async function runTurn(userText) {
     console.log(red("\n  ✗ API ключ не задан. Введи /login для настройки.\n"))
     return
   }
+  console.log(dim(`  → модель: ${state.model}, ключ: ${apiKey ? "есть" : "нет"}`))
   state.messages.push({ role: "user", content: userText })
   state.turns++
   state.interrupted = false
 
   const isOllama = state.model.startsWith("ollama:")
   const controller = new AbortController()
+
+  // 30 second timeout
+  const timeout = setTimeout(() => {
+    controller.abort()
+    stopSpinner()
+    console.log("\n" + red("✗ Таймаут: API не отвечает 30 секунд. Проверь модель: /model"))
+  }, 30000)
+
   const onSigint = () => {
     state.interrupted = true
     controller.abort()
@@ -455,6 +464,7 @@ async function runTurn(userText) {
       }
     }
   } finally {
+    clearTimeout(timeout)
     process.removeListener("SIGINT", onSigint)
   }
   console.log()
