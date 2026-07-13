@@ -52,7 +52,7 @@ import {
   generateAdminCode, listAuthorizedUsers,
 } from "./telegram-bot.mjs"
 
-const VERSION = "5.3.4"
+const VERSION = "5.3.5"
 const CONFIG_DIR = path.join(os.homedir(), ".stella")
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json")
 const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
@@ -369,6 +369,41 @@ async function runTurn(userText) {
       }
       console.log("\n")
     } else {
+      // Try streaming first, fallback to generateText if no text in 10s
+      let gotText = false
+      const fallbackTimer = setTimeout(async () => {
+        if (!gotText) {
+          stopSpinner()
+          console.log(dim("  ⏳ Streaming stuck, using generateText fallback..."))
+          try {
+            const res = await generateText({
+              model: getModel(state.model),
+              system: systemPrompt(),
+              messages: state.messages,
+              tools,
+              maxSteps: 30,
+              abortSignal: controller.signal,
+            })
+            if (res.text) {
+              process.stdout.write("\n" + violet("⏺ ") + res.text + "\n")
+              state.messages.push({ role: "assistant", content: res.text })
+              for (const toolMsg of res.response.messages) {
+                if (toolMsg.role === "assistant") state.messages.push(toolMsg)
+              }
+              const usage = res.usage
+              const inTok = usage.promptTokens ?? 0
+              const outTok = usage.completionTokens ?? 0
+              state.totalTokens.input += inTok
+              state.totalTokens.output += outTok
+              const dur = ((Date.now() - t0) / 1000).toFixed(1)
+              console.log(dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ${blue(state.model)}`))
+            }
+          } catch (e2) {
+            console.log("\n" + red("✗ Ошибка fallback: ") + String(e2?.message || e2).slice(0, 300))
+          }
+        }
+      }, 10000)
+
       result = streamText({
         model: getModel(state.model),
         system: systemPrompt(),
@@ -391,6 +426,8 @@ async function runTurn(userText) {
         switch (part.type) {
           case "text-delta": {
             stopSpinner()
+            gotText = true
+            clearTimeout(fallbackTimer)
             if (firstText) {
               process.stdout.write("\n" + violet("⏺ ") )
               firstText = false
@@ -430,6 +467,7 @@ async function runTurn(userText) {
           }
           case "finish": {
             stopSpinner()
+            clearTimeout(fallbackTimer)
             renderer.flush()
             break
           }

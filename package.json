@@ -1,6 +1,6 @@
 {
   "name": "stella-coder",
-  "version": "5.3.4",
+  "version": "5.3.5",
   "private": false,
   "description": "Stella Coder 5.0 — AI coding agent with Telegram bot, huge context, TDD, Git ecosystem, presentations, computer control, smart home, Office automation, and antivirus",
   "main": "stella-cli/index.mjs",
@@ -12,6 +12,9 @@
     "stellar-av": "node antimalware/index.mjs",
     "dev": "next dev",
     "build": "next build",
+    "desktop:dev": "concurrently -k -n renderer,main,electron \"vite --config desktop/vite.config.ts\" \"tsc --watch -p desktop/tsconfig.main.json\" \"wait-on tcp:5173 file:desktop/dist/main/main.js && cross-env ELECTRON_RENDERER_URL=http://localhost:5173 electron desktop/dist/main/main.js\"",
+    "desktop:build": "tsc -p desktop/tsconfig.main.json && vite build --config desktop/vite.config.ts",
+    "desktop:dist": "pnpm desktop:build && electron-builder --win nsis",
     "build:cli": "node stella-cli/build.mjs",
     "start": "next start",
     "lint": "eslint ."
@@ -48,16 +51,54 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.3",
     "@eslint/eslintrc": "^3.3.0",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.28.0",
     "eslint-config-next": "^16.2.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.2.0",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "vite": "^8.1.4",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.stella.coder",
+    "productName": "Stella Coder",
+    "directories": {
+      "output": "release-desktop"
+    },
+    "extraMetadata": {
+      "main": "desktop/dist/main/main.js"
+    },
+    "files": [
+      "desktop/dist/**/*",
+      "stella-cli/**/*",
+      "antimalware/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "stella-cli/**/*",
+      "antimalware/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Stella-Coder-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "pnpm": {
     "overrides": {
