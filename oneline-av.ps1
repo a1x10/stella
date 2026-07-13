@@ -1,2 +1,7 @@
-# Stella Antivirus — одна строка. Сама установит Node.js если нужно
-$url="https://github.com/a1x10/stella/releases/download/v5.3.1/stella-antivirus.zip"; $d="$env:TEMP\av.zip"; $e="$env:USERPROFILE\StellaAV"; $n="$env:LOCALAPPDATA\StellaNode"; Write-Host "✦ Stella Antivirus" -ForegroundColor Magenta; if (!(Get-Command node -ErrorAction SilentlyContinue)) { Write-Host "[*] Node.js не найден, скачиваю..."; $nu="https://nodejs.org/dist/v22.14.0/node-v22.14.0-win-x64.zip"; $nz="$env:TEMP\node.zip"; Invoke-WebRequest -Uri $nu -OutFile $nz; Expand-Archive -Path $nz -DestinationPath $n -Force; $p="$n\node-v22.14.0-win-x64"; $env:Path="$p;$env:Path"; [Environment]::SetEnvironmentVariable("Path", "$p;$([Environment]::GetEnvironmentVariable('Path','User'))", "User"); Write-Host "✓ Node.js установлен" -ForegroundColor Green }; Write-Host "[1/3] Скачивание..."; Invoke-WebRequest -Uri $url -OutFile $d; Write-Host "[2/3] Распаковка..."; Expand-Archive -Path $d -DestinationPath $e -Force; Write-Host "[3/3] Создание ярлыка..."; $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut("$env:USERPROFILE\Desktop\Stella Antivirus.lnk"); $s.TargetPath = "node.exe"; $s.Arguments = "`"$e\index.mjs`""; $s.WorkingDirectory = "$e"; $s.Save(); Write-Host "✓ Готово!" -ForegroundColor Green; & node "$e\index.mjs"
+$ErrorActionPreference = "Stop"
+$batUrl = "https://github.com/a1x10/stella/releases/download/v5.3.1/setup-antivirus.bat"
+$batFile = "$env:TEMP\stella-av-setup.bat"
+Write-Host "[*] Downloading installer..." -ForegroundColor Yellow
+Invoke-WebRequest -Uri $batUrl -OutFile $batFile
+Write-Host "[*] Running installer..." -ForegroundColor Yellow
+Start-Process cmd -ArgumentList "/c `"$batFile`"" -Wait
