@@ -1,6 +1,11 @@
 import http from "http"
 import https from "https"
-import { JSDOM } from "jsdom"
+let JSDOM
+try { const m = await import("jsdom"); JSDOM = m.JSDOM } catch { JSDOM = null }
+
+function requireJsdom() {
+  if (!JSDOM) throw new Error("jsdom не установлен. Установи: npm install jsdom")
+}
 
 function fetchUrl(url, options = {}) {
   return new Promise((resolve, reject) => {
@@ -44,6 +49,7 @@ export class WebParser {
     }
 
     const result = await fetchUrl(url)
+    requireJsdom()
     const dom = new JSDOM(result.html)
     const doc = dom.window.document
 
@@ -100,6 +106,7 @@ export class WebParser {
 
   async extractForms(url) {
     const page = await this.fetchPage(url)
+    requireJsdom()
     const dom = new JSDOM(page.html)
     const doc = dom.window.document
 
@@ -126,6 +133,7 @@ export class WebParser {
     if (engine === "duckduckgo") {
       const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
       const page = await this.fetchPage(url)
+      requireJsdom()
       const dom = new JSDOM(page.html)
       const doc = dom.window.document
 
@@ -141,6 +149,7 @@ export class WebParser {
     if (engine === "google") {
       const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`
       const page = await this.fetchPage(url)
+      requireJsdom()
       const dom = new JSDOM(page.html)
       const doc = dom.window.document
 
@@ -158,6 +167,7 @@ export class WebParser {
 
   async getSEO(url) {
     const page = await this.fetchPage(url)
+    requireJsdom()
     const dom = new JSDOM(page.html)
     const doc = dom.window.document
 
