@@ -295,6 +295,10 @@ function toolResultSummary(name, output) {
 
 // ---------- agent turn ----------
 async function runTurn(userText) {
+  if (!apiKey && !state.model.startsWith("ollama:")) {
+    console.log(red("\n  ✗ API ключ не задан. Введи /login для настройки.\n"))
+    return
+  }
   state.messages.push({ role: "user", content: userText })
   state.turns++
   state.interrupted = false
@@ -363,7 +367,13 @@ async function runTurn(userText) {
         tools,
         stopWhen: stepCountIs(30),
         abortSignal: controller.signal,
-        onError: () => {},
+        onError: (err) => {
+          stopSpinner()
+          console.log("\n" + red("✗ Ошибка API: ") + String(err?.message || err).slice(0, 500))
+          if (String(err?.message || "").match(/api key|unauthorized|401|credential/i)) {
+            console.log(dim("  Задай ключ: ") + purple("/login") + dim(" или сохрани в ~/.stella/config.json"))
+          }
+        },
       })
 
       const renderer = createStreamRenderer((s) => process.stdout.write(s))
