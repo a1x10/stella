@@ -319,7 +319,7 @@ function render(){
 initGame();
 </script></body></html>`
 
-const 2048_GAME = `
+const GAME_2048 = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>2048</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -651,7 +651,7 @@ export class GameEngine {
   }
 
   async play2048() {
-    return saveAndOpen(2048_GAME, "2048")
+    return saveAndOpen(GAME_2048, "2048")
   }
 
   async playFlappyBird() {
