@@ -264,9 +264,22 @@ export default function SalesPage() {
           </div>
 
           {/* Install Command */}
-          <div className="mt-8 inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10">
-            <span className="text-[#64748b] font-mono text-sm">$</span>
-            <code className="text-[#22c55e] font-mono text-sm">npm install -g stella-coder</code>
+          <div className="mt-8 flex flex-col items-center gap-4">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 rounded-lg border border-white/10">
+              <span className="text-[#64748b] font-mono text-sm">$</span>
+              <code className="text-[#22c55e] font-mono text-sm">npm install -g stella-coder</code>
+            </div>
+            <div className="flex gap-3 flex-wrap justify-center">
+              <a href="https://github.com/a1x10/stella/releases/download/v5.3.1/setup-full.bat" className="px-4 py-2 bg-[#22c55e]/10 border border-[#22c55e]/30 rounded-lg text-[#22c55e] font-mono text-xs hover:bg-[#22c55e]/20 transition-colors">
+                Download Installer (.bat)
+              </a>
+              <a href="https://github.com/a1x10/stella/releases/download/v5.3.1/stella-coder.zip" className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#94a3b8] font-mono text-xs hover:bg-white/10 transition-colors">
+                Download ZIP
+              </a>
+              <a href="https://github.com/a1x10/stella/releases/download/v5.3.1/stella-antivirus.zip" className="px-4 py-2 bg-[#f38ba8]/10 border border-[#f38ba8]/30 rounded-lg text-[#f38ba8] font-mono text-xs hover:bg-[#f38ba8]/20 transition-colors">
+                Antivirus
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -466,6 +479,71 @@ export default function SalesPage() {
               </button>
             </form>
           )}
+        </div>
+      </section>
+
+      {/* Download Section */}
+      <section className="py-24 px-4 border-t border-white/5">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">
+              Download & Install
+            </h2>
+            <p className="text-[#64748b] text-lg">
+              One command. That's it.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Stella CLI */}
+            <div className="p-6 bg-[#111118] rounded-2xl border border-white/5">
+              <h3 className="text-xl font-bold text-[#22c55e] mb-4">Stella Coder CLI</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[#64748b] text-sm mb-2">npm (requires Node.js)</p>
+                  <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs break-all">npm install -g stella-coder</code>
+                </div>
+                <div>
+                  <p className="text-[#64748b] text-sm mb-2">One-click installer (auto-downloads Node.js)</p>
+                  <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs break-all">cmd /c "curl -L -o %TEMP%\install.bat https://github.com/a1x10/stella/releases/download/v5.3.1/setup-full.bat &amp;&amp; %TEMP%\install.bat"</code>
+                </div>
+                <div>
+                  <p className="text-[#64748b] text-sm mb-2">Direct download</p>
+                  <a href="https://github.com/a1x10/stella/releases/download/v5.3.1/stella-coder.zip" className="inline-block px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#94a3b8] font-mono text-xs hover:bg-white/10 transition-colors">stella-coder.zip</a>
+                </div>
+              </div>
+            </div>
+
+            {/* Antivirus */}
+            <div className="p-6 bg-[#111118] rounded-2xl border border-white/5">
+              <h3 className="text-xl font-bold text-[#f38ba8] mb-4">Stella Antivirus</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[#64748b] text-sm mb-2">One-click installer</p>
+                  <code className="block p-3 bg-black/50 rounded-lg text-[#f38ba8] font-mono text-xs break-all">cmd /c "curl -L -o %TEMP%\av.bat https://github.com/a1x10/stella/releases/download/v5.3.1/setup-antivirus.bat &amp;&amp; %TEMP%\av.bat"</code>
+                </div>
+                <div>
+                  <p className="text-[#64748b] text-sm mb-2">Direct download</p>
+                  <a href="https://github.com/a1x10/stella/releases/download/v5.3.1/stella-antivirus.zip" className="inline-block px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-[#94a3b8] font-mono text-xs hover:bg-white/10 transition-colors">stella-antivirus.zip</a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Launch */}
+          <div className="mt-8 p-6 bg-[#111118] rounded-2xl border border-white/5">
+            <h3 className="text-lg font-bold mb-4">Quick Launch (after install)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-[#64748b] text-sm mb-2">Stella Coder</p>
+                <code className="block p-3 bg-black/50 rounded-lg text-[#22c55e] font-mono text-xs">cmd /c stella</code>
+              </div>
+              <div>
+                <p className="text-[#64748b] text-sm mb-2">Stella Antivirus</p>
+                <code className="block p-3 bg-black/50 rounded-lg text-[#f38ba8] font-mono text-xs break-all">%USERPROFILE%\StellaNode\node-v22.14.0-win-x64\node.exe "%USERPROFILE%\StellaAV\index.mjs"</code>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
