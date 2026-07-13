@@ -1,7 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Stella Antivirus - Installer
-color 0B
+title Stella Antivirus Installer
 cls
 echo.
 echo   ==============================
@@ -21,7 +20,7 @@ if %errorlevel% neq 0 (
         echo   [OK] Node.js installed
     ) else (
         echo   [ERROR] Cannot download Node.js
-        echo   Install Node.js from https://nodejs.org
+        echo   Install from https://nodejs.org
         pause
         exit /b 1
     )
@@ -46,15 +45,20 @@ powershell -Command "Expand-Archive -Path '%TEMP%\stella-av.zip' -DestinationPat
 
 :: Shortcut
 echo   [3/3] Creating shortcut...
-powershell -Command "$ws=New-Object -ComObject WScript.Shell; $s=$ws.CreateShortcut('%USERPROFILE%\Desktop\Stella Antivirus.lnk'); $s.TargetPath='node.exe'; $s.Arguments='\""%USERPROFILE%\StellaAV\index.mjs\""; $s.WorkingDirectory='%USERPROFILE%\StellaAV'; $s.Save()"
+powershell -ExecutionPolicy Bypass -Command ^
+  "$ws = New-Object -ComObject WScript.Shell;" ^
+  "$s = $ws.CreateShortcut($env:USERPROFILE + '\Desktop\Stella Antivirus.lnk');" ^
+  "$s.TargetPath = (Get-Command node).Source;" ^
+  "$s.Arguments = [char]34 + $env:USERPROFILE + '\StellaAV\index.mjs' + [char]34;" ^
+  "$s.WorkingDirectory = $env:USERPROFILE + '\StellaAV';" ^
+  "$s.Save()"
 
 echo.
 echo   ==============================
 echo    DONE!
-echo    Desktop shortcut created
 echo   ==============================
 echo.
-echo   Launching antivirus...
+echo   Launching...
 echo.
 node "%USERPROFILE%\StellaAV\index.mjs"
 pause

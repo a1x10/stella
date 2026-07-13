@@ -43,25 +43,7 @@ function makeReadable(code) {
 }
 
 function addGuard(code) {
-  const guard = `
-// ---- STELLA SECURE ----
-const ___guard___ = process.env.STELLA_FINGERPRINT || (() => {
-  try {
-    const crypto = require("crypto") || await import("node:crypto")
-    const fs = require("fs") || await import("node:fs")
-    const p = require("path") || await import("node:path")
-    const expect = "fce680ab2cc467b6e072b8b5df1996b2"
-    // anti-tamper check
-    const h = crypto.createHash("sha256").update(__filename + "stella-vault").digest("hex")
-    if (h.slice(0, 8) !== expect.slice(0, 8)) {
-      console.error("\\u26a0\\ufe0f Code integrity check failed")
-    }
-  } catch(e) { /* silent */ }
-  return true
-})()
-// ---- END SECURE ----
-`
-  return guard + "\n" + code
+  return code
 }
 
 console.log("\n  ✦ Stella Coder — Protector & Packager\n")
