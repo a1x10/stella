@@ -1,0 +1,337 @@
+const ___guard___ = process.env.STELLA_FINGERPRINT || (() => {
+  try {
+    const crypto = require("crypto") || await import("node:crypto")
+    const fs = require("fs") || await import("node:fs")
+    const p = require("path") || await import("node:path")
+    const expect = "fce680ab2cc467b6e072b8b5df1996b2"
+    const h = crypto.createHash("sha256").update(__filename + "stella-vault").digest("hex")
+    if (h.slice(0, 8) !== expect.slice(0, 8)) {
+      console.error("\u26a0\ufe0f Code integrity check failed")
+    }
+  } catch(e) {  }
+  return true
+})()
+import { execSync } from "child_process"
+import { readFileSync, existsSync } from "fs"
+import { join } from "path"
+import http from "http"
+import https from "https"
+function apiRequest(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https") ? https : http
+    const urlObj = new URL(url)
+    const headers = {
+      "Accept": "application/vnd.github+json",
+      ...options.headers,
+    }
+    if (options.token) headers["Authorization"] = `Bearer ${options.token}`
+    const reqOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port,
+      path: urlObj.pathname + urlObj.search,
+      method: options.method || "GET",
+      headers,
+    }
+    const req = mod.request(reqOptions, (res) => {
+      let data = ""
+      res.on("data", (chunk) => data += chunk)
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(data) }) }
+        catch { resolve({ status: res.statusCode, data }) }
+      })
+    })
+    req.on("error", reject)
+    if (options.body) req.write(JSON.stringify(options.body))
+    req.end()
+  })
+}
+function getGitRemote() {
+  try {
+    const remote = execSync("git remote get-url origin", { encoding: "utf-8" }).trim()
+    const match = remote.match(/github\.com[/:]([^/]+)\/([^/.]+)/)
+    if (match) return { provider: "github", owner: match[1], repo: match[2] }
+    const glMatch = remote.match(/gitlab\.com[/:]([^/]+)\/([^/.]+)/)
+    if (glMatch) return { provider: "gitlab", owner: glMatch[1], repo: glMatch[2] }
+    return { provider: "unknown", remote }
+  } catch {
+    return null
+  }
+}
+function getToken(provider) {
+  if (provider === "github") return process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+  if (provider === "gitlab") return process.env.GITLAB_TOKEN || process.env.GL_TOKEN
+  try {
+    const config = execSync("git config --get credential.helper", { encoding: "utf-8" }).trim()
+    if (config.includes("store")) {
+      const credPath = join(process.env.USERPROFILE || process.env.HOME || "", ".git-credentials")
+      if (existsSync(credPath)) {
+        const creds = readFileSync(credPath, "utf-8")
+        const match = creds.match(/https:\/\/[^:]+:([^@]+)@github\.com/)
+        if (match) return match[1]
+      }
+    }
+  } catch {}
+  return null
+}
+export class GitAPI {
+  constructor() {
+    this.info = getGitRemote()
+    this.token = this.info ? getToken(this.info.provider) : null
+  }
+  isConfigured() {
+    return this.info && this.info.provider !== "unknown"
+  }
+  hasToken() {
+    return !!this.token
+  }
+  async listIssues(state = "open", perPage = 20) {
+    if (!this.isConfigured()) return { success: false, error: "No GitHub/GitLab remote configured" }
+    const { provider, owner, repo } = this.info
+    const token = this.token
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, issues: Array.isArray(res.data) ? res.data : [] }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, issues: Array.isArray(res.data) ? res.data : [] }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async createIssue(title, body, labels = []) {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "POST",
+        token: this.token,
+        body: { title, body, labels },
+      })
+      return { success: res.status === 201, data: res.data, url: res.data?.html_url }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "POST",
+        token: this.token,
+        body: { title, description: body, labels: labels.join(",") },
+      })
+      return { success: res.status === 201, data: res.data, url: res.data?.web_url }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async closeIssue(issueNumber) {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "PATCH",
+        token: this.token,
+        body: { state: "closed" },
+      })
+      return { success: res.status === 200, data: res.data }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "PUT",
+        token: this.token,
+        body: { state_event: "close" },
+      })
+      return { success: res.status === 200, data: res.data }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async listPRs(state = "open") {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, prs: Array.isArray(res.data) ? res.data : [] }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const stateMap = { open: "opened", closed: "closed", merged: "merged" }
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, prs: Array.isArray(res.data) ? res.data : [] }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async createPR(title, body, head = "main", base = "main") {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "POST",
+        token: this.token,
+        body: { title, body, head, base },
+      })
+      return { success: res.status === 201, data: res.data, url: res.data?.html_url }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "POST",
+        token: this.token,
+        body: { title, description: body, source_branch: head, target_branch: base },
+      })
+      return { success: res.status === 201, data: res.data, url: res.data?.web_url }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async reviewPR(prNumber, event, body) {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "POST",
+        token: this.token,
+        body: { event, body },
+      })
+      return { success: res.status === 200 || res.status === 201, data: res.data }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "POST",
+        token: this.token,
+      })
+      return { success: res.status === 201, data: res.data }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async mergePR(prNumber) {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "PUT",
+        token: this.token,
+        body: { merge_method: "squash" },
+      })
+      return { success: res.status === 200, data: res.data }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "PUT",
+        token: this.token,
+      })
+      return { success: res.status === 200, data: res.data }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async getPRFiles(prNumber) {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, files: Array.isArray(res.data) ? res.data : [] }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, files: res.data?.changes || [] }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async addComment(prNumber, body, filePath, position) {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github" && filePath && position) {
+      const prUrl = `https:
+      const prRes = await apiRequest(prUrl, { token: this.token })
+      const commitId = prRes.data?.head?.sha
+      if (commitId) {
+        const url = `https:
+        const res = await apiRequest(url, {
+          method: "POST",
+          token: this.token,
+          body: { body, path: filePath, position, commit_id: commitId },
+        })
+        return { success: res.status === 201, data: res.data }
+      }
+    }
+    return await this.reviewPR(prNumber, "COMMENT", body)
+  }
+  async getRepoInfo() {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, repo: res.data }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, repo: res.data }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async listBranches() {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, branches: Array.isArray(res.data) ? res.data.map(b => b.name) : [] }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, branches: Array.isArray(res.data) ? res.data.map(b => b.name) : [] }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async listReleases() {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, releases: Array.isArray(res.data) ? res.data : [] }
+    }
+    if (provider === "gitlab") {
+      const encoded = encodeURIComponent(`${owner}/${repo}`)
+      const url = `https:
+      const res = await apiRequest(url, { token: this.token })
+      return { success: true, releases: Array.isArray(res.data) ? res.data : [] }
+    }
+    return { success: false, error: "Unknown provider" }
+  }
+  async createRelease(tag, name, body) {
+    if (!this.isConfigured()) return { success: false, error: "No git remote configured" }
+    const { provider, owner, repo } = this.info
+    if (provider === "github") {
+      const url = `https:
+      const res = await apiRequest(url, {
+        method: "POST",
+        token: this.token,
+        body: { tag_name: tag, name, body },
+      })
+      return { success: res.status === 201, data: res.data, url: res.data?.html_url }
+    }
+    return { success: false, error: "Release creation only supported on GitHub" }
+  }
+}
+export default GitAPI
