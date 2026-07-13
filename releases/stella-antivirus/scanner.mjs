@@ -2,6 +2,11 @@ import fs from "node:fs"
 import path from "node:path"
 import { execSync } from "node:child_process"
 import { checkFileForMalware, computeFileHash, SKIP_DIRS, QUICK_SCAN_PATHS, QUARANTINE_DIR, isExcluded } from "./database.mjs"
+
+// ═══════════════════════════════════════════════════════════════
+//  STELLAR ANTIVIRUS — Full Scanner Engine
+// ═══════════════════════════════════════════════════════════════
+
 const SCAN_EXTENSIONS = new Set([
   ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
   ".py", ".rb", ".php", ".pl", ".sh", ".bash",
@@ -14,7 +19,11 @@ const SCAN_EXTENSIONS = new Set([
   ".jar", ".class", ".war",
   ".reg", ".inf",
 ])
+
+// Skip large files (over 10MB for speed)
 const MAX_FILE_SIZE = 10 * 1024 * 1024
+
+// Known safe directories to skip
 const SAFE_DIRS = new Set([
   "Microsoft", "dotnet", "NuGet", "pip", "npm", "node-gyp",
   "VisualStudio", "VS", "Windows Kits", "Windows Defender",
@@ -23,6 +32,8 @@ const SAFE_DIRS = new Set([
   "WindowsIoTExtensionSDK", "WindowsMobileExtensionSDK", "WindowsTeamExtensionSDK",
   "Universal CRT", "WinRT Intellisense", "Kits", "WPT",
 ])
+
+// Skip files from known safe publishers
 const SAFE_FILE_PATTERNS = [
   /^vs_/, /^Microsoft\.VisualStudio/, /^dump64/, /^msdia/, /^msvcp/,
   /^vcruntime/, /^KernelTrace/, /^feedback/, /^Dia2Lib/, /^envdte/,
@@ -35,6 +46,8 @@ const SAFE_FILE_PATTERNS = [
   /^capCut/, /^ChromeSetup/, /^Claude/, /^Codex/, /^Docker/,
   /^BlueStacks/, /^VC_redist/,
 ]
+
+// Safe path patterns (substring match)
 const SAFE_PATH_PATTERNS = [
   "\\Microsoft\\", "\\dotnet\\", "\\NuGet\\", "\\pip\\", "\\npm\\",
   "\\node-gyp\\", "\\Visual Studio\\", "\\Windows Kits\\",
@@ -42,7 +55,13 @@ const SAFE_PATH_PATTERNS = [
   "\\AppData\\Local\\Temp\\", "\\AppData\\Local\\Microsoft\\",
   "\\AppData\\Roaming\\npm\\", "\\AppData\\Roaming\\pip\\",
 ]
+
+// ═══════════════════════════════════════════════════════════════
+//  EXCLUSIONS
+// ═══════════════════════════════════════════════════════════════
+
 let exclusions = []
+
 export function loadExclusions(filepath) {
   try {
     if (fs.existsSync(filepath)) {
@@ -53,17 +72,21 @@ export function loadExclusions(filepath) {
     }
   } catch {}
 }
+
 export function addExclusion(pattern) {
   if (!exclusions.includes(pattern)) {
     exclusions.push(pattern)
   }
 }
+
 export function removeExclusion(pattern) {
   exclusions = exclusions.filter(e => e !== pattern)
 }
+
 export function getExclusions() {
   return [...exclusions]
 }
+
 function isExcludedPath(filepath) {
   const normalized = filepath.replace(/\\/g, "/").toLowerCase()
   for (const exc of exclusions) {
@@ -72,43 +95,69 @@ function isExcludedPath(filepath) {
   }
   return false
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  FILE SCANNER
+// ═══════════════════════════════════════════════════════════════
+
 export function scanFile(filepath, options = {}) {
   const { verbose = false, onFile = null } = options
+
   try {
     if (!fs.existsSync(filepath)) return { filepath, error: "Файл не найден" }
+
     const stat = fs.statSync(filepath)
     if (!stat.isFile()) return { filepath, error: "Не является файлом" }
+
     if (stat.size > MAX_FILE_SIZE) return { filepath, error: `Файл слишком большой (${(stat.size / 1024 / 1024).toFixed(1)} MB)` }
+
     if (isExcludedPath(filepath)) return { filepath, excluded: true }
+
+    // Skip known safe files
     const basename = path.basename(filepath)
     if (SAFE_FILE_PATTERNS.some(p => p.test(basename))) return { filepath, excluded: true }
+
+    // Skip safe path patterns
     if (SAFE_PATH_PATTERNS.some(p => filepath.includes(p))) return { filepath, excluded: true }
+
     if (onFile) onFile(filepath, stat.size)
+
     const content = fs.readFileSync(filepath)
     const result = checkFileForMalware(content, filepath)
     result.size = stat.size
     result.modified = stat.mtime
     result.hash = computeFileHash(content)
+
     return result
   } catch (e) {
     return { filepath, error: e.message }
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  FULL SYSTEM SCAN
+// ═══════════════════════════════════════════════════════════════
+
 export function fullSystemScan(options = {}) {
   const { verbose = false, onFile = null, onProgress = null, maxDepth = 20 } = options
   const results = []
   let fileCount = 0
+
   function walk(currentPath, depth) {
     if (depth > maxDepth) return
+
     let entries
     try {
       entries = fs.readdirSync(currentPath, { withFileTypes: true })
     } catch { return }
+
     for (const entry of entries) {
       if (SKIP_DIRS.has(entry.name)) continue
       if (SAFE_DIRS.has(entry.name)) continue
       if (entry.name.startsWith(".") && entry.name !== ".env" && entry.name !== ".config") continue
+
       const fullPath = path.join(currentPath, entry.name)
+
       if (entry.isDirectory()) {
         walk(fullPath, depth + 1)
       } else if (entry.isFile()) {
@@ -116,12 +165,15 @@ export function fullSystemScan(options = {}) {
         if (SCAN_EXTENSIONS.has(ext) || !ext) {
           fileCount++
           if (onProgress) onProgress(fileCount, fullPath)
+
           const result = scanFile(fullPath, { verbose, onFile })
           results.push(result)
         }
       }
     }
   }
+
+  // Scan all drives on Windows
   const drives = ["C:", "D:", "E:", "F:"]
   for (const drive of drives) {
     const drivePath = drive + "\\"
@@ -129,30 +181,44 @@ export function fullSystemScan(options = {}) {
       walk(drivePath, 0)
     }
   }
+
   return { results, totalFiles: fileCount, scanType: "full" }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  QUICK SCAN
+// ═══════════════════════════════════════════════════════════════
+
 export function quickScan(options = {}) {
   const { verbose = false, onFile = null, onProgress = null, maxFiles = 2000 } = options
   const results = []
   let fileCount = 0
+
   const username = process.env.USERNAME || process.env.USER || "user"
+
   const scanPaths = QUICK_SCAN_PATHS.map(p =>
     p.replace(/%USERNAME%/g, username)
   )
+
   for (const scanPath of scanPaths) {
     if (!fs.existsSync(scanPath)) continue
     if (fileCount >= maxFiles) break
+
     function walk(currentPath, depth) {
       if (depth > 5 || fileCount >= maxFiles) return
+
       let entries
       try {
         entries = fs.readdirSync(currentPath, { withFileTypes: true })
       } catch { return }
+
       for (const entry of entries) {
         if (SKIP_DIRS.has(entry.name)) continue
         if (SAFE_DIRS.has(entry.name)) continue
         if (fileCount >= maxFiles) break
+
         const fullPath = path.join(currentPath, entry.name)
+
         if (entry.isDirectory()) {
           walk(fullPath, depth + 1)
         } else if (entry.isFile()) {
@@ -160,30 +226,43 @@ export function quickScan(options = {}) {
           if (SCAN_EXTENSIONS.has(ext) || !ext) {
             fileCount++
             if (onProgress) onProgress(fileCount, fullPath)
+
             const result = scanFile(fullPath, { verbose, onFile })
             results.push(result)
           }
         }
       }
     }
+
     walk(scanPath, 0)
   }
+
   return { results, totalFiles: fileCount, scanType: "quick" }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  CUSTOM PATH SCAN
+// ═══════════════════════════════════════════════════════════════
+
 export function scanPath(dirPath, options = {}) {
   const { verbose = false, onFile = null, onProgress = null, maxDepth = 10 } = options
   const results = []
   let fileCount = 0
+
   function walk(currentPath, depth) {
     if (depth > maxDepth) return
+
     let entries
     try {
       entries = fs.readdirSync(currentPath, { withFileTypes: true })
     } catch { return }
+
     for (const entry of entries) {
       if (SKIP_DIRS.has(entry.name)) continue
       if (entry.name.startsWith(".")) continue
+
       const fullPath = path.join(currentPath, entry.name)
+
       if (entry.isDirectory()) {
         walk(fullPath, depth + 1)
       } else if (entry.isFile()) {
@@ -191,12 +270,14 @@ export function scanPath(dirPath, options = {}) {
         if (SCAN_EXTENSIONS.has(ext) || !ext) {
           fileCount++
           if (onProgress) onProgress(fileCount, fullPath)
+
           const result = scanFile(fullPath, { verbose, onFile })
           results.push(result)
         }
       }
     }
   }
+
   if (fs.existsSync(dirPath)) {
     const stat = fs.statSync(dirPath)
     if (stat.isFile()) {
@@ -206,8 +287,14 @@ export function scanPath(dirPath, options = {}) {
       walk(dirPath, 0)
     }
   }
+
   return { results, totalFiles: fileCount, scanType: "custom" }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  BOOT SECTOR / MBR SCANNER
+// ═══════════════════════════════════════════════════════════════
+
 export function scanBootSector(drive = "C:") {
   try {
     const devicePath = `\\\\.\\${drive}`
@@ -215,6 +302,7 @@ export function scanBootSector(drive = "C:") {
     const buf = Buffer.alloc(512)
     fs.readSync(fd, buf, 0, 512, 0)
     fs.closeSync(fd)
+
     const result = checkFileForMalware(buf, `${drive}\\MBR`)
     result.scanType = "boot-sector"
     return result
@@ -222,8 +310,15 @@ export function scanBootSector(drive = "C:") {
     return { filepath: `${drive}\\MBR`, error: `Не удалось прочитать MBR: ${e.message}` }
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  MEMORY PROCESS SCANNER
+// ═══════════════════════════════════════════════════════════════
+
 export function scanRunningProcesses() {
   const results = []
+
+  // Known safe Windows processes
   const SAFE_PROCESSES = new Set([
     "WMIRegistrationService.exe", "WmiPrvSE.exe", "WmiApSrv.exe",
     "svchost.exe", "services.exe", "lsass.exe", "wininit.exe",
@@ -256,9 +351,11 @@ export function scanRunningProcesses() {
     "Docker Desktop.exe", "com.docker.backend.exe",
     "zoom.exe", "Zoom.exe",
   ])
+
   try {
     const output = execSync("tasklist /FO CSV /NH", { encoding: "utf8", timeout: 10000 })
     const lines = output.split("\n").filter(l => l.trim())
+
     for (const line of lines) {
       const match = line.match(/"([^"]+)","(\d+)","([^"]+)"/)
       if (match) {
@@ -277,41 +374,56 @@ export function scanRunningProcesses() {
   } catch {}
   return results
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  QUARANTINE SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
 export function ensureQuarantine() {
   if (!fs.existsSync(QUARANTINE_DIR)) {
     fs.mkdirSync(QUARANTINE_DIR, { recursive: true })
   }
 }
+
 export function quarantineFile(filepath) {
   ensureQuarantine()
   const filename = path.basename(filepath)
   const hash = computeFileHash(fs.readFileSync(filepath))
   const quarantinePath = path.join(QUARANTINE_DIR, `${hash}_${filename}.quarantine`)
   const metaPath = quarantinePath + ".meta"
+
   const metadata = {
     originalPath: filepath,
     hash,
     timestamp: new Date().toISOString(),
     size: fs.statSync(filepath).size,
   }
+
   fs.copyFileSync(filepath, quarantinePath)
   fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2))
   fs.unlinkSync(filepath)
+
   return { quarantined: quarantinePath, metadata }
 }
+
 export function restoreFromQuarantine(quarantinePath) {
   const metaPath = quarantinePath + ".meta"
   if (!fs.existsSync(metaPath)) return { error: "Метаданные не найдены" }
+
   const metadata = JSON.parse(fs.readFileSync(metaPath, "utf8"))
   const restoreDir = path.dirname(metadata.originalPath)
+
   if (!fs.existsSync(restoreDir)) {
     fs.mkdirSync(restoreDir, { recursive: true })
   }
+
   fs.copyFileSync(quarantinePath, metadata.originalPath)
   fs.unlinkSync(quarantinePath)
   fs.unlinkSync(metaPath)
+
   return { restored: metadata.originalPath }
 }
+
 export function listQuarantine() {
   ensureQuarantine()
   const files = fs.readdirSync(QUARANTINE_DIR).filter(f => f.endsWith(".quarantine"))
@@ -325,14 +437,24 @@ export function listQuarantine() {
     }
   })
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  REAL-TIME FILE MONITOR
+// ═══════════════════════════════════════════════════════════════
+
 let monitorActive = false
 let monitorInterval = null
 let fileHashes = new Map()
+
 export function startRealTimeMonitor(dirPath, options = {}) {
   const { interval = 5000, onThreat = null, onFileChange = null } = options
+
   if (monitorActive) return { error: "Мониторинг уже запущен" }
+
   monitorActive = true
   const initialHashes = new Map()
+
+  // Build initial hash map
   function buildHashMap(currentPath, depth) {
     if (depth > 5) return
     try {
@@ -351,11 +473,16 @@ export function startRealTimeMonitor(dirPath, options = {}) {
       }
     } catch {}
   }
+
   buildHashMap(dirPath, 0)
   fileHashes = initialHashes
+
+  // Monitor loop
   monitorInterval = setInterval(() => {
     if (!monitorActive) return
+
     const currentFiles = new Map()
+
     function scanDir(currentPath, depth) {
       if (depth > 5) return
       try {
@@ -374,26 +501,36 @@ export function startRealTimeMonitor(dirPath, options = {}) {
         }
       } catch {}
     }
+
     scanDir(dirPath, 0)
+
+    // Check for new/modified files
     for (const [filepath, info] of currentFiles) {
       const prev = fileHashes.get(filepath)
       if (!prev || prev.mtime !== info.mtime || prev.size !== info.size) {
         if (onFileChange) onFileChange(filepath, prev ? "modified" : "new")
+
+        // Scan the file
         const result = scanFile(filepath)
         if (!result.clean && onThreat) {
           onThreat(result)
         }
       }
     }
+
+    // Check for deleted files
     for (const [filepath] of fileHashes) {
       if (!currentFiles.has(filepath)) {
         if (onFileChange) onFileChange(filepath, "deleted")
       }
     }
+
     fileHashes = currentFiles
   }, interval)
+
   return { status: "started", dirPath, interval }
 }
+
 export function stopRealTimeMonitor() {
   monitorActive = false
   if (monitorInterval) {
@@ -403,14 +540,21 @@ export function stopRealTimeMonitor() {
   fileHashes.clear()
   return { status: "stopped" }
 }
+
 export function getMonitorStatus() {
   return { active: monitorActive, trackedFiles: fileHashes.size }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  SCAN REPORT
+// ═══════════════════════════════════════════════════════════════
+
 export function generateReport(results, scanType = "full") {
   const threats = results.filter(r => !r.clean && !r.error)
   const warnings = results.filter(r => r.clean && r.warnings && r.warnings.length > 0)
   const clean = results.filter(r => r.clean && (!r.warnings || r.warnings.length === 0))
   const errors = results.filter(r => r.error)
+
   const report = {
     scanType,
     timestamp: new Date().toISOString(),
@@ -431,10 +575,17 @@ export function generateReport(results, scanType = "full") {
       detections: r.warnings,
     })),
   }
+
   return report
 }
+
 export function saveReport(report, filepath) {
   fs.writeFileSync(filepath, JSON.stringify(report, null, 2))
   return filepath
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  LEGACY COMPAT
+// ═══════════════════════════════════════════════════════════════
+
 export { scanPath as scanDirectory }

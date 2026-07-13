@@ -4,13 +4,16 @@ import path from "node:path"
 import os from "node:os"
 import { execSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
 const STELLA_HIDDEN = path.join(os.homedir(), ".stella", ".secure")
 const KEY_FILE = path.join(STELLA_HIDDEN, "vault.dat")
 const FINGERPRINT_FILE = path.join(STELLA_HIDDEN, ".fp")
 const INTEGRITY_FILE = path.join(STELLA_HIDDEN, ".integrity")
 const LOCKOUT_FILE = path.join(STELLA_HIDDEN, ".lockout")
+
 const CLI_FILES = [
   "stella-cli/index.mjs",
   "stella-cli/tools.mjs",
@@ -19,6 +22,7 @@ const CLI_FILES = [
   "stella-cli/markdown.mjs",
   "stella-cli/security.mjs",
 ]
+
 function ensureDir() {
   fs.mkdirSync(STELLA_HIDDEN, { recursive: true })
   try {
@@ -27,11 +31,14 @@ function ensureDir() {
     }
   } catch {}
 }
+
 const PBKDF2_ITERATIONS = 100000
 const SALT = "stella-vault-v3-2026"
+
 function deriveKey(password) {
   return crypto.pbkdf2Sync(password, SALT, PBKDF2_ITERATIONS, 32, "sha512")
 }
+
 function aesEncrypt(plaintext, password) {
   const key = deriveKey(password)
   const iv = crypto.randomBytes(12)
@@ -41,6 +48,7 @@ function aesEncrypt(plaintext, password) {
   const payload = Buffer.concat([iv, authTag, encrypted])
   return payload.toString("base64")
 }
+
 function aesDecrypt(encryptedBase64, password) {
   const key = deriveKey(password)
   const payload = Buffer.from(encryptedBase64, "base64")
@@ -53,12 +61,15 @@ function aesDecrypt(encryptedBase64, password) {
   const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()])
   return decrypted.toString("utf8")
 }
+
 function xorEncrypt(data, key) {
   return aesEncrypt(data, key)
 }
+
 function xorDecrypt(encrypted, key) {
   try { return aesDecrypt(encrypted, key) } catch { return null }
 }
+
 function getHardwareFingerprint() {
   const parts = []
   try {
@@ -68,16 +79,19 @@ function getHardwareFingerprint() {
         { encoding: "utf8", timeout: 5000 }
       ).trim()
       parts.push(cpuId)
+
       const mbSerial = execSync(
         'wmic baseboard get SerialNumber /value 2>nul | findstr SerialNumber',
         { encoding: "utf8", timeout: 5000 }
       ).trim()
       parts.push(mbSerial)
+
       const biosSerial = execSync(
         'wmic bios get SerialNumber /value 2>nul | findstr SerialNumber',
         { encoding: "utf8", timeout: 5000 }
       ).trim()
       parts.push(biosSerial)
+
       const diskSerial = execSync(
         'wmic diskdrive get SerialNumber /value 2>nul | findstr SerialNumber',
         { encoding: "utf8", timeout: 5000 }
@@ -96,6 +110,7 @@ function getHardwareFingerprint() {
       }).trim()
       parts.push(mid)
     }
+
     const nets = os.networkInterfaces()
     for (const name of Object.keys(nets)) {
       for (const net of nets[name]) {
@@ -105,16 +120,20 @@ function getHardwareFingerprint() {
       }
     }
   } catch {}
+
   if (parts.length === 0) {
     parts.push(os.hostname())
     parts.push(os.cpus()[0]?.model || "unknown")
     parts.push(os.totalmem().toString())
   }
+
   return crypto.createHash("sha512").update(parts.join(":::")).digest("hex")
 }
+
 function getEncryptionKey() {
   return crypto.createHash("sha256").update("stella-vault-portable-2026").digest("hex")
 }
+
 function computeCodeHash() {
   const projectRoot = path.resolve(__dirname, "..")
   let combined = ""
@@ -126,9 +145,11 @@ function computeCodeHash() {
   }
   return crypto.createHash("sha256").update(combined).digest("hex")
 }
+
 export function verifyCodeIntegrity() {
   ensureDir()
   const currentHash = computeCodeHash()
+
   if (fs.existsSync(INTEGRITY_FILE)) {
     const saved = fs.readFileSync(INTEGRITY_FILE, "utf8").trim()
     if (saved !== currentHash) {
@@ -137,42 +158,56 @@ export function verifyCodeIntegrity() {
   } else {
     fs.writeFileSync(INTEGRITY_FILE, currentHash, "utf8")
   }
+
   return { ok: true }
 }
+
 export function saveIntegrityHash() {
   ensureDir()
   fs.writeFileSync(INTEGRITY_FILE, computeCodeHash(), "utf8")
 }
+
 export function getApiKey() {
   ensureDir()
+
   if (!fs.existsSync(KEY_FILE)) return null
+
   try {
     const encrypted = fs.readFileSync(KEY_FILE, "utf8").trim()
     const encKey = getEncryptionKey()
     const apiKey = xorDecrypt(encrypted, encKey)
+
     if (!apiKey || apiKey.length < 10) return null
+
     return { apiKey }
   } catch {
     return null
   }
 }
+
 export function saveApiKey(apiKey) {
   ensureDir()
+
   if (!apiKey || typeof apiKey !== "string" || apiKey.length < 10) {
     return { ok: false, error: "Неверный формат API ключа" }
   }
+
   const encKey = getEncryptionKey()
   const encrypted = xorEncrypt(apiKey, encKey)
   fs.writeFileSync(KEY_FILE, encrypted, "utf8")
+
   saveIntegrityHash()
+
   try {
     if (process.platform === "win32") {
       execSync(`attrib +h +s "${KEY_FILE}"`, { stdio: "ignore" })
       execSync(`attrib +h +s "${INTEGRITY_FILE}"`, { stdio: "ignore" })
     }
   } catch {}
+
   return { ok: true }
 }
+
 export function deleteApiKey() {
   ensureDir()
   try {
@@ -184,11 +219,13 @@ export function deleteApiKey() {
     return { ok: false, error: e.message }
   }
 }
+
 export function isKeyBoundToThisMachine() {
   const result = getApiKey()
   if (!result || result.error) return false
   return true
 }
+
 export function getHardwareInfo() {
   const fp = getHardwareFingerprint()
   return {

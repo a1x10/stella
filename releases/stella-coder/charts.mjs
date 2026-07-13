@@ -2,10 +2,13 @@ import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { execSync } from "node:child_process"
+
 const CHARTS_DIR = path.join(os.homedir(), ".stella", "charts")
+
 function ensureDir() {
   if (!fs.existsSync(CHARTS_DIR)) fs.mkdirSync(CHARTS_DIR, { recursive: true })
 }
+
 function openFile(filePath) {
   try {
     if (process.platform === "win32") {
@@ -17,6 +20,7 @@ function openFile(filePath) {
     }
   } catch {}
 }
+
 function generateChartHTML(config) {
   const {
     type = "bar",
@@ -35,9 +39,11 @@ function generateChartHTML(config) {
     fontSize = 14,
     darkMode = false,
   } = config
+
   const bg = darkMode ? "#1e1e2e" : "#ffffff"
   const fg = darkMode ? "#cdd6f4" : "#333333"
   const gridColor = darkMode ? "#45475a" : "#e0e0e0"
+
   const chartDatasets = datasets.map((ds, i) => {
     const dsConfig = {
       label: ds.label || `Series ${i + 1}`,
@@ -62,6 +68,7 @@ function generateChartHTML(config) {
     }
     return dsConfig
   })
+
   const chartConfig = {
     type: type === "horizontalBar" ? "bar" : type,
     data: {
@@ -87,6 +94,7 @@ function generateChartHTML(config) {
       scales: {},
     },
   }
+
   if (!["pie", "doughnut", "radar", "polarArea"].includes(type)) {
     chartConfig.options.indexAxis = type === "horizontalBar" ? "y" : "x"
     chartConfig.options.scales = {
@@ -105,6 +113,7 @@ function generateChartHTML(config) {
       },
     }
   }
+
   if (type === "radar") {
     chartConfig.options.scales = {
       r: {
@@ -115,13 +124,14 @@ function generateChartHTML(config) {
       },
     }
   }
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
-<script src="https:
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: ${bg}; color: ${fg}; font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 24px; min-height: 100vh; }
@@ -149,15 +159,17 @@ function generateChartHTML(config) {
 const config = ${JSON.stringify(chartConfig, null, 2)};
 const ctx = document.getElementById('chart').getContext('2d');
 const chart = new Chart(ctx, config);
+
 function downloadPNG() {
   const link = document.createElement('a');
   link.download = '${title.replace(/[^a-zA-Z0-9]/g, "_")}.png';
   link.href = chart.toBase64Image('image/png', 1);
   link.click();
 }
+
 function downloadSVG() {
   const canvas = document.getElementById('chart');
-  const svgNS = 'http:
+  const svgNS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(svgNS, 'svg');
   svg.setAttribute('width', canvas.width);
   svg.setAttribute('height', canvas.height);
@@ -172,6 +184,7 @@ function downloadSVG() {
   link.href = URL.createObjectURL(blob);
   link.click();
 }
+
 function downloadCSV() {
   const labels = ${JSON.stringify(labels)};
   const datasets = ${JSON.stringify(datasets.map(ds => ({ label: ds.label, data: ds.data })))};
@@ -189,6 +202,7 @@ function downloadCSV() {
 </body>
 </html>`
 }
+
 function getColor(index) {
   const colors = [
     "#7c3aed", "#2563eb", "#059669", "#d97706", "#dc2626",
@@ -198,6 +212,7 @@ function getColor(index) {
   ]
   return colors[index % colors.length]
 }
+
 function getColorAlpha(index, alpha) {
   const hex = getColor(index)
   const r = parseInt(hex.slice(1, 3), 16)
@@ -205,10 +220,12 @@ function getColorAlpha(index, alpha) {
   const b = parseInt(hex.slice(5, 7), 16)
   return `rgba(${r},${g},${b},${alpha})`
 }
+
 export class ChartGenerator {
   constructor() {
     ensureDir()
   }
+
   async createChart(config) {
     const html = generateChartHTML(config)
     const filename = `chart_${Date.now()}.html`
@@ -217,6 +234,7 @@ export class ChartGenerator {
     openFile(filePath)
     return { success: true, path: filePath, filename }
   }
+
   async bar(title, labels, data, options = {}) {
     return this.createChart({
       type: "bar",
@@ -226,6 +244,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async line(title, labels, datasets, options = {}) {
     return this.createChart({
       type: "line",
@@ -243,6 +262,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async pie(title, labels, data, options = {}) {
     return this.createChart({
       type: "pie",
@@ -254,6 +274,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async doughnut(title, labels, data, options = {}) {
     return this.createChart({
       type: "doughnut",
@@ -265,6 +286,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async radar(title, labels, datasets, options = {}) {
     return this.createChart({
       type: "radar",
@@ -279,6 +301,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async scatter(title, dataPoints, options = {}) {
     const datasets = options.datasets || [{ label: title, data: dataPoints }]
     return this.createChart({
@@ -295,6 +318,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async horizontalBar(title, labels, data, options = {}) {
     return this.createChart({
       type: "horizontalBar",
@@ -304,6 +328,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async polarArea(title, labels, data, options = {}) {
     return this.createChart({
       type: "polarArea",
@@ -314,6 +339,7 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async bubble(title, dataPoints, options = {}) {
     return this.createChart({
       type: "bubble",
@@ -327,14 +353,17 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async fromCSV(csvPath, options = {}) {
     if (!fs.existsSync(csvPath)) return { success: false, error: "CSV file not found" }
     const content = fs.readFileSync(csvPath, "utf8")
     const lines = content.trim().split("\n")
     if (lines.length < 2) return { success: false, error: "CSV too short" }
+
     const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""))
     const labels = []
     const datasets = headers.slice(1).map(h => ({ label: h, data: [] }))
+
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(",").map(c => c.trim().replace(/"/g, ""))
       labels.push(cols[0] || `Row ${i}`)
@@ -342,6 +371,7 @@ export class ChartGenerator {
         datasets[j - 1].data.push(parseFloat(cols[j]) || 0)
       }
     }
+
     const chartType = options.type || (labels.length > 6 ? "line" : "bar")
     return this.createChart({
       type: chartType,
@@ -351,11 +381,13 @@ export class ChartGenerator {
       ...options,
     })
   }
+
   async fromJSON(jsonPath, options = {}) {
     if (!fs.existsSync(jsonPath)) return { success: false, error: "JSON file not found" }
     const data = JSON.parse(fs.readFileSync(jsonPath, "utf8"))
     return this.createChart({ ...data, ...options })
   }
+
   listCharts() {
     if (!fs.existsSync(CHARTS_DIR)) return []
     return fs.readdirSync(CHARTS_DIR)
@@ -367,6 +399,7 @@ export class ChartGenerator {
       }))
       .sort((a, b) => b.created - a.created)
   }
+
   deleteChart(filename) {
     const filePath = path.join(CHARTS_DIR, filename)
     if (fs.existsSync(filePath)) {

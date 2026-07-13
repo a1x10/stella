@@ -1,17 +1,21 @@
 #!/usr/bin/env node
+// Stella Coder — Code Protector & Packager
 import fs from "node:fs"
 import path from "node:path"
 import { execSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, "..")
 const RELEASES = path.join(ROOT, "releases")
 const STELLA_PKG = path.join(RELEASES, "stella-coder")
 const AV_PKG = path.join(RELEASES, "stella-antivirus")
+
 function cleanDir(dir) {
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true })
   fs.mkdirSync(dir, { recursive: true })
 }
+
 function copy(src, dst) {
   if (fs.existsSync(src)) {
     if (fs.statSync(src).isDirectory()) {
@@ -22,25 +26,26 @@ function copy(src, dst) {
     }
   }
 }
+
 function stripComments(code) {
   return code
-    .replace(/\/\/.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\
-    .replace(/^\s*[\r\n]/gm, "")
-    .trim()
 }
+
 function makeReadable(code) {
   return code
-    .replace(/^[ \t]+/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
 }
+
 function addGuard(code) {
   return code
 }
+
 console.log("\n  ✦ Stella Coder — Protector & Packager\n")
+
+// Create release directories
 cleanDir(STELLA_PKG)
 cleanDir(AV_PKG)
+
+// 1. Package Stella CLI
 console.log("  [1/3] Packaging Stella CLI...")
 const cliFiles = fs.readdirSync(path.join(ROOT, "stella-cli")).filter(f => f.endsWith(".mjs"))
 for (const f of cliFiles) {
@@ -50,9 +55,12 @@ for (const f of cliFiles) {
   code = stripComments(code)
   fs.writeFileSync(path.join(STELLA_PKG, f), code)
 }
+// Copy package.json and README
 copy(path.join(ROOT, "package.json"), path.join(STELLA_PKG, "package.json"))
 copy(path.join(ROOT, "stella-cli", "sea-config.json"), path.join(STELLA_PKG, "sea-config.json"))
 copy(path.join(ROOT, "README.md"), path.join(STELLA_PKG, "README.md"))
+
+// Create install-stella.bat
 fs.writeFileSync(path.join(STELLA_PKG, "install-stella.bat"), `@echo off
 chcp 65001 >nul
 echo.
@@ -62,10 +70,12 @@ echo.
 echo  Install: npm i -g stella-coder
 echo  Or run:  node stella-cli/index.mjs
 echo.
-echo  Docs:    https:
+echo  Docs:    https://a1x10.github.io/stella/
 echo.
 pause
 `)
+
+// 2. Package Antivirus separately
 console.log("  [2/3] Packaging Stella Antivirus...")
 const avFiles = fs.readdirSync(path.join(ROOT, "antimalware")).filter(f => f.endsWith(".mjs"))
 for (const f of avFiles) {
@@ -75,7 +85,10 @@ for (const f of avFiles) {
   code = stripComments(code)
   fs.writeFileSync(path.join(AV_PKG, f), code)
 }
+// Copy antimalware/index.mjs as entry point
 copy(path.join(ROOT, "antimalware", "index.mjs"), path.join(AV_PKG, "index.mjs"))
+
+// Create standalone install-antivirus.bat
 fs.writeFileSync(path.join(AV_PKG, "install-av.bat"), `@echo off
 chcp 65001 >nul
 echo.
@@ -89,7 +102,11 @@ echo  signature-based detection + AI analysis.
 echo.
 pause
 `)
+
+// 3. Create combined installers for root
 console.log("  [3/3] Creating root installers...")
+
+// Stella installer
 fs.writeFileSync(path.join(ROOT, "install-stella-pkg.bat"), `@echo off
 chcp 65001 >nul
 echo.
@@ -112,6 +129,8 @@ if %errorlevel% equ 0 (
 echo.
 pause
 `)
+
+// Antivirus standalone installer
 fs.writeFileSync(path.join(ROOT, "install-av.bat"), `@echo off
 chcp 65001 >nul
 echo.
@@ -130,24 +149,34 @@ echo  Method: signature database + AI heuristic
 echo.
 pause
 `)
+
+// Create shortcuts
 fs.writeFileSync(path.join(ROOT, "run-antivirus.bat"), `@echo off
 chcp 65001 >nul
 node "%~dp0antimalware\\index.mjs"
 pause
 `)
+
 console.log(fs.existsSync(path.join(AV_PKG, "index.mjs")) ? "  ✓" : "  ✗")
 console.log()
+
+// Create archive versions for GitHub release
 console.log("  Creating archives for GitHub Release...")
 const zipDir = path.join(ROOT, "releases")
 if (!fs.existsSync(zipDir)) fs.mkdirSync(zipDir, { recursive: true })
+
+// ZIP Stella
 try {
   execSync(`powershell -Command "Compress-Archive -Path '${STELLA_PKG}\\*' -DestinationPath '${path.join(zipDir, 'stella-coder.zip')}' -Force"`, { timeout: 15000 })
   console.log("    ✓ stella-coder.zip")
 } catch { console.log("    ✗ stella-coder.zip (use 7zip or manual)") }
+
+// ZIP Antivirus
 try {
   execSync(`powershell -Command "Compress-Archive -Path '${AV_PKG}\\*' -DestinationPath '${path.join(zipDir, 'stella-antivirus.zip')}' -Force"`, { timeout: 15000 })
   console.log("    ✓ stella-antivirus.zip")
 } catch { console.log("    ✗ stella-antivirus.zip") }
+
 console.log()
 console.log("  ✓ Done! Packages in releases/")
 console.log()

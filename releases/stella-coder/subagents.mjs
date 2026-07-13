@@ -3,6 +3,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import fs from "node:fs"
 import path from "node:path"
 import { execSync } from "node:child_process"
+
+// Субагенты Stella
 const SUBAGENTS = {
   "codebase-investigator": {
     name: "Codebase Investigator",
@@ -76,20 +78,26 @@ const SUBAGENTS = {
 Используй conventional commits.`,
   },
 }
+
+// Запуск субагента
 export async function runSubagent(name, task, options = {}) {
   const agent = SUBAGENTS[name]
   if (!agent) {
     return { error: `Субагент "${name}" не найден. Доступные: ${Object.keys(SUBAGENTS).join(", ")}` }
   }
+
   const { apiKey, model, onProgress } = options
+
   console.log(`\n  ${agent.icon} Запуск ${agent.name}...`)
   console.log(`  Задача: ${task}\n`)
+
   try {
     const zen = createOpenAICompatible({
       name: "zen",
-      baseURL: "https:
+      baseURL: "https://opencode.ai/zen/v1",
       apiKey: apiKey || "",
     })
+
     const result = await generateText({
       model: zen.chatModel(model || "mimo-v2.5-free"),
       system: agent.systemPrompt,
@@ -104,13 +112,17 @@ export async function runSubagent(name, task, options = {}) {
         }
       },
     })
+
     console.log(`\n  ${agent.icon} ${agent.name} завершён\n`)
     return { success: true, result: result.text, agent: name }
+
   } catch (err) {
     console.error(`\n  ✗ Ошибка ${agent.name}: ${err.message}\n`)
     return { error: err.message, agent: name }
   }
 }
+
+// Список субагентов
 export function listSubagents() {
   return Object.entries(SUBAGENTS).map(([id, agent]) => ({
     id,
@@ -119,9 +131,12 @@ export function listSubagents() {
     icon: agent.icon,
   }))
 }
+
+// Парсинг команды @agent
 export function parseAgentCommand(input) {
   const match = input.match(/^@(\S+)\s+(.+)$/s)
   if (!match) return null
   return { agent: match[1], task: match[2].trim() }
 }
+
 export { SUBAGENTS }

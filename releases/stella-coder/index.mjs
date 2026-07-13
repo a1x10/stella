@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Stella Coder 3.9 — терминальный AI-агент
 import readline from "node:readline"
 import fs from "node:fs"
 import path from "node:path"
@@ -50,11 +51,14 @@ import {
   verifyAuthCode, getPendingCodes,
   generateAdminCode, listAuthorizedUsers,
 } from "./telegram-bot.mjs"
+
 const VERSION = "5.2.0"
 const CONFIG_DIR = path.join(os.homedir(), ".stella")
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json")
 const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
-const ZEN_BASE_URL = "https:
+
+const ZEN_BASE_URL = "https://opencode.ai/zen/v1"
+
 const MODELS = [
   { id: "mimo-v2.5-free", label: "MiMo V2.5 (бесплатная)" },
   { id: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash (бесплатная)" },
@@ -77,6 +81,8 @@ const MODELS = [
   { id: "kimi-k2.6", label: "Kimi K2.6 (Moonshot)" },
   { id: "minimax-m3", label: "MiniMax M3" },
 ]
+
+// ---------- config ----------
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8")) } catch { return {} }
 }
@@ -84,7 +90,10 @@ function saveConfig(cfg) {
   fs.mkdirSync(CONFIG_DIR, { recursive: true })
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2))
 }
+
 const config = loadConfig()
+
+// Load API key from secure vault (hardware-bound)
 const secureKey = getApiKey()
 let apiKey = ""
 if (secureKey && secureKey.error) {
@@ -96,14 +105,19 @@ if (secureKey && secureKey.error) {
   apiKey = config.apiKey
   saveApiKey(apiKey)
 }
+
+// OpenCode Zen provider
 const zen = createOpenAICompatible({
   name: "zen",
   baseURL: ZEN_BASE_URL,
   apiKey,
 })
+
 function getModel(modelId) {
   return zen.chatModel(modelId)
 }
+
+// auto-load .env files from cwd (like Next.js)
 for (const envFile of [".env.local", ".env.development.local", ".env"]) {
   try {
     const p = path.join(process.cwd(), envFile)
@@ -114,6 +128,8 @@ for (const envFile of [".env.local", ".env.development.local", ".env"]) {
     }
   } catch {}
 }
+
+// ---------- state ----------
 const state = {
   model: config.model || MODELS[0].id,
   messages: [],
@@ -124,7 +140,11 @@ const state = {
   interrupted: false,
   startedAt: Date.now(),
 }
+
+// approx pricing per 1M tokens (USD) for cost estimation
 const PRICING = { input: 0.6, output: 2.2 }
+
+// ---------- args ----------
 const args = process.argv.slice(2)
 const printMode = args.includes("-p") || args.includes("--print")
 const printPrompt = printMode ? args[args.indexOf(args.includes("-p") ? "-p" : "--print") + 1] : null
@@ -133,9 +153,12 @@ if (args.includes("--version") || args.includes("-v")) {
   process.exit(0)
 }
 if (args.includes("--model")) state.model = args[args.indexOf("--model") + 1] || state.model
+
+// ---------- system prompt ----------
 function systemPrompt() {
   let projectContext = ""
   try {
+    // Auto-load SPEC.md, CLAUDE.md, AGENTS.md, STELLA.md
     for (const specFile of ["SPEC.md", "CLAUDE.md", "AGENTS.md", "STELLA.md"]) {
       const p = path.join(process.cwd(), specFile)
       if (fs.existsSync(p)) {
@@ -143,13 +166,17 @@ function systemPrompt() {
       }
     }
   } catch {}
+
+  // Build repo map for context
   let repoContext = ""
   try {
     const map = buildRepoMap(process.cwd())
     repoContext = `\n\n# Карта проекта (${map.summary})\n\`\`\`\n${map.tree.slice(0, 200).join("\n")}\n\`\`\``
   } catch {}
+
   return `Ты — Stella, ИИ-агент терминального агента Stella Coder 4.0 (аналог Claude Code / Cursor).
 Ты — эксперт-программист с огромным контекстом, работающий в: ${process.cwd()} (ОС: ${os.platform()}).
+
 Твои возможности:
 - Огромный контекст: ты "держишь в голове" структуру всего репозитория
 - Spec-Driven Development: работай по SPEC.md / CLAUDE.md
@@ -157,6 +184,7 @@ function systemPrompt() {
 - Multi-file editing: правь 15+ файлов за раз
 - Git экосистема: ветки, PR, мержи, разрешение конфликтов
 - Автосжатие контекста при необходимости
+
 Правила:
 - Используй инструменты (read_file, edit_file, write_file, bash, grep, glob, list_dir), чтобы РЕАЛЬНО выполнять задачи.
 - Перед изменением файла всегда читай его.
@@ -166,6 +194,8 @@ function systemPrompt() {
 - Отвечай кратко и по делу, в формате markdown. Код — в блоках с указанием языка.
 - Отвечай на языке пользователя.${projectContext}${repoContext}`
 }
+
+// ---------- spinner ----------
 let spinnerTimer = null
 function startSpinner(label) {
   if (printMode) return
@@ -185,7 +215,9 @@ function stopSpinner() {
     process.stdout.write("\r" + " ".repeat(70) + "\r")
   }
 }
-let rl 
+
+// ---------- permissions ----------
+let rl // set later
 async function askPermission(kind, summary) {
   if (printMode) return true
   if (state.alwaysAllow.has(kind)) return true
@@ -207,9 +239,12 @@ async function askPermission(kind, summary) {
   }
   return a === "y" || a === "yes" || a === "д" || a === ""
 }
+
 function question(q) {
   return new Promise((res) => rl.question(q, res))
 }
+
+// ---------- todos display ----------
 function renderTodos(todos) {
   stopSpinner()
   console.log()
@@ -224,7 +259,11 @@ function renderTodos(todos) {
 function strikeDim(s) {
   return dim("\x1b[9m" + s + "\x1b[29m")
 }
+
+// ---------- tools ----------
 const tools = createTools({ ask: askPermission, onTodos: renderTodos })
+
+// ---------- tool display ----------
 function toolLabel(name, input) {
   const short = (s, n = 60) => (s && s.length > n ? s.slice(0, n) + "…" : s || "")
   switch (name) {
@@ -253,10 +292,13 @@ function toolResultSummary(name, output) {
     default: return dim("готово")
   }
 }
+
+// ---------- agent turn ----------
 async function runTurn(userText) {
   state.messages.push({ role: "user", content: userText })
   state.turns++
   state.interrupted = false
+
   const isOllama = state.model.startsWith("ollama:")
   const controller = new AbortController()
   const onSigint = () => {
@@ -264,17 +306,21 @@ async function runTurn(userText) {
     controller.abort()
   }
   process.once("SIGINT", onSigint)
+
   startSpinner()
   const t0 = Date.now()
   let firstText = true
+
   try {
     let result
+
     if (isOllama) {
       const ollamaModel = state.model.replace("ollama:", "")
       const ollamaMessages = state.messages.map(m => ({
         role: m.role,
         content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
       }))
+
       const res = await fetch(`${OLLAMA_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -285,16 +331,19 @@ async function runTurn(userText) {
         }),
         signal: controller.signal,
       })
+
       stopSpinner()
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split("\n")
         buffer = lines.pop()
+
         for (const line of lines) {
           if (!line.trim()) continue
           try {
@@ -316,7 +365,9 @@ async function runTurn(userText) {
         abortSignal: controller.signal,
         onError: () => {},
       })
+
       const renderer = createStreamRenderer((s) => process.stdout.write(s))
+
       for await (const part of result.fullStream) {
         switch (part.type) {
           case "text-delta": {
@@ -365,8 +416,10 @@ async function runTurn(userText) {
           }
         }
       }
+
       const response = await result.response
       state.messages.push(...response.messages)
+
       const usage = await result.usage
       const inTok = usage.inputTokens ?? 0
       const outTok = usage.outputTokens ?? 0
@@ -374,6 +427,7 @@ async function runTurn(userText) {
       state.totalTokens.output += outTok
       const cost = (inTok * PRICING.input + outTok * PRICING.output) / 1e6
       state.totalCost += cost
+
       const dur = ((Date.now() - t0) / 1000).toFixed(1)
       console.log()
       console.log(
@@ -395,7 +449,10 @@ async function runTurn(userText) {
   }
   console.log()
 }
+
+// ---------- slash commands ----------
 const COMMANDS = [
+  // Основные
   ["/help", "все команды"],
   ["/model", "выбрать модель"],
   ["/clear", "очистить контекст"],
@@ -405,6 +462,8 @@ const COMMANDS = [
   ["/config", "показать/изменить конфигурацию"],
   ["/version", "версия"],
   ["/exit", "выход (также /quit, Ctrl+D)"],
+
+  // Работа с файлами
   ["/read", "прочитать файл"],
   ["/write", "записать файл"],
   ["/edit", "редактировать файл"],
@@ -426,6 +485,8 @@ const COMMANDS = [
   ["/stat", "информация о файле"],
   ["/type", "показать тип файла"],
   ["/open", "открыть файл в редакторе"],
+
+  // Git
   ["/git", "git operations (status, diff, log, commit, push, pull)"],
   ["/commit", "AI-коммит (сгенерировать сообщение + git commit)"],
   ["/diff", "git diff"],
@@ -444,6 +505,8 @@ const COMMANDS = [
   ["/push", "git push"],
   ["/clone", "git clone"],
   ["/init", "git init"],
+
+  // AI и агенты
   ["/plan", "автономный план выполнения задачи"],
   ["/todo", "управление задачами (создать/показать/выполнитb)"],
   ["/agent", "запустить субагент для сложной задачи"],
@@ -452,9 +515,13 @@ const COMMANDS = [
   ["/memory", "показать/обновить память проекта (STELLA.md)"],
   ["/remember", "сохранить информацию в память"],
   ["/forget", "удалить информацию из памяти"],
+
+  // Веб и внешние ресурсы
   ["/web", "поиск в интернете"],
   ["/fetch", "загрузить URL"],
   ["/screenshot", "сделать скриншот страницы"],
+
+  // Работа с контентом
   ["/read-image", "прочитать изображение"],
   ["/read-pdf", "прочитать PDF"],
   ["/read-doc", "прочитать документ"],
@@ -473,6 +540,8 @@ const COMMANDS = [
   ["/debug", "отладка"],
   ["/profile", "профилирование"],
   ["/benchmark", "бенчмарки"],
+
+  // Безопасность
   ["/av", "запустить Stellar Antivirus"],
   ["/vt", "сканировать файл через VirusTotal"],
   ["/ai-scan", "AI-анализ подозрительного кода"],
@@ -480,12 +549,16 @@ const COMMANDS = [
   ["/vuln", "поиск уязвимостей"],
   ["/secrets", "поиск секретов в коде"],
   ["/hash", "вычислить хеш файла"],
+
+  // Управление пакетами
   ["/install", "установить пакет"],
   ["/uninstall", "удалить пакет"],
   ["/update", "обновить пакеты"],
   ["/outdated", "проверить устаревшие пакеты"],
   ["/deps", "показать зависимости"],
   ["/audit-deps", "аудит зависимостей"],
+
+  // Окружение
   ["/env", "показать переменные окружения"],
   ["/set-env", "установить переменную окружения"],
   ["/unset-env", "удалить переменную окружения"],
@@ -504,27 +577,37 @@ const COMMANDS = [
   ["/dns", "DNS запрос"],
   ["/curl", "HTTP запрос"],
   ["/wget", "загрузить файл"],
+
+  // Мониторинг
   ["/top", "процессы по использованию CPU"],
   ["/ps", "список процессов"],
   ["/kill", "завершить процесс"],
   ["/watch", "мониторинг команды"],
   ["/tail-log", "мониторинг лог-файла"],
   ["/notify", "отправить уведомление"],
+
+  // Логирование
   ["/log", "показать логи"],
   ["/error", "показать ошибки"],
   ["/warn", "показать предупреждения"],
   ["/info", "показать информацию"],
   ["/debug-log", "включить отладочный лог"],
+
+  // Работа с базами данных
   ["/db", "подключение к БД"],
   ["/query", "выполнить SQL запрос"],
   ["/migrate", "миграция базы данных"],
   ["/seed", "заполнить БД тестовыми данными"],
+
+  // Документация
   ["/docs", "сгенерировать документацию"],
   ["/readme", "сгенерировать README"],
   ["/changelog", "сгенерировать changelog"],
   ["/examples", "показать примеры"],
   ["/tutorial", "показать обучение"],
   ["/wizard", "мастер настройки"],
+
+  // Управление сессией
   ["/login", "ввести API ключ"],
   ["/newkey", "заменить API ключ"],
   ["/delapikey", "удалить API ключ"],
@@ -536,12 +619,18 @@ const COMMANDS = [
   ["/save", "сохранить сессию"],
   ["/load", "загрузить сессию"],
   ["/sessions", "список сохранённых сессий"],
+
+  // Ollama
   ["/ollama", "подключить локальную LLM (Ollama)"],
+
+  // Презентации
   ["/presentation", "создать презентацию из темы"],
   ["/presentation-theme", "показать доступные темы оформления"],
   ["/presentation-list", "показать созданные презентации"],
   ["/presentation-custom", "создать кастомную презентацию"],
   ["/presentation-export", "экспортировать презентацию в PDF"],
+
+  // Coding Brain
   ["/brain", "показать контекст и инструменты проекта"],
   ["/brain-map", "построить карту репозитория"],
   ["/brain-compress", "сжать контекст сессии"],
@@ -555,6 +644,8 @@ const COMMANDS = [
   ["/git-pr", "создать Pull Request"],
   ["/git-merge-auto", "автоматический merge с разрешением конфликтов"],
   ["/fix-all", "полный цикл: линтер → форматер → типы → тесты"],
+
+  // Telegram Bot
   ["/tg", "запустить Telegram бота"],
   ["/tg-stop", "остановить Telegram бота"],
   ["/tg-notify", "отправить уведомление в Telegram"],
@@ -562,16 +653,22 @@ const COMMANDS = [
   ["/tg-verify", "привязать Telegram аккаунт по коду"],
   ["/tg-code", "сгенерировать код для продажи доступа"],
   ["/tg-users", "показать кто подключён"],
+
+  // Autonomous Agent
   ["/auto", "запустить автономный режим (цель)"],
   ["/auto-stop", "остановить автономный агента"],
   ["/auto-status", "статус автономного агента"],
   ["/auto-dashboard", "создать dashboard с результатами"],
   ["/auto-history", "история выполненных задач"],
+
+  // Computer Vision Monitor
   ["/monitor", "запустить мониторинг экрана (AI vision)"],
   ["/monitor-stop", "остановить мониторинг"],
   ["/monitor-status", "статус мониторинга"],
   ["/monitor-alerts", "показать обнаруженные проблемы"],
   ["/monitor-screenshot", "сделать скриншот и проанализировать"],
+
+  // Chrome DevTools Protocol
   ["/browser", "открыть браузер и перейти на URL"],
   ["/browser-click", "кликнуть по элементу (CSS selector)"],
   ["/browser-type", "набрать текст в поле"],
@@ -580,6 +677,8 @@ const COMMANDS = [
   ["/browser-links", "показать все ссылки"],
   ["/browser-forms", "показать формы на странице"],
   ["/browser-close", "закрыть браузер"],
+
+  // Git API (GitHub/GitLab)
   ["/git-issues", "список issues"],
   ["/git-issue", "создать issue"],
   ["/git-prs", "список Pull Requests"],
@@ -589,6 +688,8 @@ const COMMANDS = [
   ["/git-branches", "список веток"],
   ["/git-releases", "список релизов"],
   ["/git-release", "создать релиз"],
+
+  // Web Parser
   ["/fetch", "загрузить и показать страницу"],
   ["/fetch-text", "извлечь текст со страницы"],
   ["/fetch-links", "извлечь все ссылки"],
@@ -597,6 +698,8 @@ const COMMANDS = [
   ["/fetch-seo", "SEO анализ страницы"],
   ["/web-search", "поиск в интернете"],
   ["/web-batch", "загрузить несколько страниц"],
+
+  // Gmail
   ["/gmail-setup", "настроить Gmail API (OAuth2)"],
   ["/gmail-auth", "завершить OAuth2 авторизацию"],
   ["/gmail-send", "отправить email"],
@@ -605,6 +708,8 @@ const COMMANDS = [
   ["/gmail-read", "прочитать письмо"],
   ["/gmail-labels", "список меток"],
   ["/gmail-read-all", "пометить все прочитанным"],
+
+  // Charts
   ["/chart-bar", "столбчатая диаграмма"],
   ["/chart-line", "линейный график"],
   ["/chart-pie", "круговая диаграмма"],
@@ -613,12 +718,16 @@ const COMMANDS = [
   ["/chart-scatter", "точечный график"],
   ["/chart-csv", "график из CSV файла"],
   ["/chart-list", "список сохранённых графиков"],
+
+  // Yandex Maps
   ["/ymaps-key", "установить API ключ Яндекс.Карт"],
   ["/ymaps-geo", "геокодирование (адрес → координаты)"],
   ["/ymaps-show", "показать место на карте"],
   ["/ymaps-route", "маршрут от A до B"],
   ["/ymaps-places", "показать несколько мест"],
   ["/ymaps-static", "скачать статическую карту"],
+
+  // Games
   ["/snake", "игра Змейка"],
   ["/tetris", "игра Тетрис"],
   ["/minesweeper", "игра Сапёр"],
@@ -626,6 +735,8 @@ const COMMANDS = [
   ["/flappy", "игра Flappy Bird"],
   ["/tictactoe", "Крестики-нолики"],
   ["/sudoku", "игра Судоку"],
+
+  // Google Drive Backup
   ["/gdrive-setup", "настроить Google Drive API"],
   ["/gdrive-auth", "завершить OAuth2 авторизацию"],
   ["/gdrive-backup", "создать бэкап проекта"],
@@ -633,6 +744,8 @@ const COMMANDS = [
   ["/gdrive-quota", "использовано места"],
   ["/gdrive-search", "поиск файлов"],
   ["/gdrive-history", "история бэкапов"],
+
+  // ADB
   ["/adb-devices", "список устройств"],
   ["/adb-info", "информация об устройстве"],
   ["/adb-screenshot", "скриншот телефона"],
@@ -643,6 +756,8 @@ const COMMANDS = [
   ["/adb-battery", "информация о батарее"],
   ["/adb-install", "установить APK"],
   ["/adb-packages", "список пакетов"],
+
+  // Home Assistant
   ["/ha-setup", "настроить Home Assistant"],
   ["/ha-status", "статус HA"],
   ["/ha-states", "все состояния"],
@@ -655,6 +770,8 @@ const COMMANDS = [
   ["/ha-media", "список медиа-плееров"],
   ["/ha-volume", "громкость"],
   ["/ha-cover", "управление шторами/воротами"],
+
+  // Управление компьютером
   ["/open", "открыть приложение/файл/URL"],
   ["/app", "запустить приложение"],
   ["/url", "открыть ссылку в браузере"],
@@ -675,6 +792,8 @@ const COMMANDS = [
   ["/lock", "заблокировать экран"],
   ["/shutdown", "выключить/перезагрузить"],
   ["/search", "быстрый поиск файлов"],
+
+  // Умный дом
   ["/tv", "управление Sony TV (вкл/выкл/канал/громкость)"],
   ["tv-off", "выключить TV"],
   ["tv-on", "включить TV"],
@@ -684,6 +803,8 @@ const COMMANDS = [
   ["/light", "управление умными лампами"],
   ["/cast", "трансляция на Chromecast"],
   ["/wol", "включить устройство по MAC"],
+
+  // Сервер и терминал
   ["/exec", "выполнить команду в терминале"],
   ["/shell", "выполнить shell-команду"],
   ["/powershell", "выполнить PowerShell команду"],
@@ -712,6 +833,8 @@ const COMMANDS = [
   ["/monitor", "мониторинг ресурсов"],
   ["/sys", "полный доступ к системе"],
   ["/sudo", "команда от администратора"],
+
+  // Дополнительно
   ["/paste", "вставить из буфера обмена"],
   ["/clipboard", "копировать в буфер обмена"],
   ["/color", "изменить цветовую тему"],
@@ -725,9 +848,12 @@ const COMMANDS = [
   ["/report", "сообщить об ошибке"],
   ["/support", "получить поддержку"],
 ]
+
 async function handleCommand(line) {
   const [cmd, ...rest] = line.trim().split(/\s+/)
   const arg = rest.join(" ")
+  
+  // Handle @agent commands
   if (cmd.startsWith("@")) {
     const agentName = cmd.slice(1)
     const agents = listSubagents()
@@ -748,6 +874,7 @@ async function handleCommand(line) {
       return
     }
   }
+  
   switch (cmd) {
     case "/help": {
       console.log()
@@ -989,6 +1116,7 @@ async function handleCommand(line) {
       const { showUI } = await import("../antimalware/ui.mjs")
       rl.close()
       await showUI()
+      // After AV exits, restart REPL
       rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -1009,6 +1137,10 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ФАЙЛЫ
+    // ═══════════════════════════════════════════════════
     case "/read": {
       if (!arg) { console.log(dim("\n  Использование: /read <файл>\n")); return }
       try {
@@ -1149,6 +1281,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  GIT
+    // ═══════════════════════════════════════════════════
     case "/git": {
       if (!arg) {
         console.log(box([
@@ -1304,10 +1440,15 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  AI И АГЕНТЫ
+    // ═══════════════════════════════════════════════════
     case "/todo": {
       const todoPath = path.join(process.cwd(), ".stella-todos.json")
       let todos = []
       try { todos = JSON.parse(fs.readFileSync(todoPath, "utf8")) } catch {}
+
       if (!arg || arg === "list" || arg === "показать") {
         if (todos.length === 0) {
           console.log(dim("\n  Нет задач. Добавь: /todo add <текст>\n"))
@@ -1390,12 +1531,13 @@ async function handleCommand(line) {
         violet("/skill search <запрос>") + dim(" — найти навык"),
         "",
         dim("Навыки расширяют возможности Stella."),
-        dim("Смотри: ") + cyan("https:
+        dim("Смотри: ") + cyan("https://opencode.ai/skills"),
       ], { title: "Навыки (Skills)", padding: 2 }))
       console.log()
       return
     }
     case "/mcp": {
+      // Delegate to MCP command handler
       const mcpHandler = MCP_COMMANDS["/mcp"]?.handler
       if (mcpHandler) {
         await mcpHandler(arg || "help")
@@ -1425,6 +1567,7 @@ async function handleCommand(line) {
         console.log()
         return
       }
+      // Parse @agent task format
       const agentMatch = parseAgentCommand(`@${arg}`)
       if (agentMatch) {
         const result = await runSubagent(agentMatch.agent, agentMatch.task, {
@@ -1436,6 +1579,7 @@ async function handleCommand(line) {
           console.log("\n" + renderMarkdown(result.result) + "\n")
         }
       } else {
+        // Run as general subagent task
         const result = await runSubagent("codebase-investigator", arg, {
           apiKey,
           model: state.model,
@@ -1455,7 +1599,7 @@ async function handleCommand(line) {
     case "@debugger":
     case "@performance":
     case "@git-expert": {
-      const agentName = command.slice(1) 
+      const agentName = command.slice(1) // Remove @
       if (!arg) {
         console.log(dim(`\n  Использование: @${agentName} <задача>\n`))
         return
@@ -1470,6 +1614,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ВЕБ И КОНТЕНТ
+    // ═══════════════════════════════════════════════════
     case "/web": {
       if (!arg) { console.log(dim("\n  Использование: /web <поисковый запрос>\n")); return }
       await runTurn(`Найди в интернете: ${arg}. Верни краткую выжимку с источниками.`)
@@ -1512,6 +1660,10 @@ async function handleCommand(line) {
       await runTurn(`Суммаризируй: ${arg}`)
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ТЕСТИРОВАНИЕ И СБОРКА
+    // ═══════════════════════════════════════════════════
     case "/test": {
       const testCmd = arg || "npm test"
       console.log(dim(`\n  Запускаю: ${testCmd}\n`))
@@ -1592,6 +1744,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  БЕЗОПАСНОСТЬ
+    // ═══════════════════════════════════════════════════
     case "/audit": {
       console.log(dim("\n  Аудит безопасности...\n"))
       await runTurn(`Проведи аудит безопасности этого проекта. Проверь зависимости, конфиги, секреты.`)
@@ -1632,6 +1788,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ПАКЕТЫ
+    // ═══════════════════════════════════════════════════
     case "/install": {
       if (!arg) { console.log(dim("\n  Использование: /install <пакет>\n")); return }
       const pkgManager = fs.existsSync("pnpm-lock.yaml") ? "pnpm" : fs.existsSync("yarn.lock") ? "yarn" : "npm"
@@ -1691,6 +1851,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ОКРУЖЕНИЕ
+    // ═══════════════════════════════════════════════════
     case "/env": {
       console.log()
       if (arg) {
@@ -1818,6 +1982,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  МОНИТОРИНГ
+    // ═══════════════════════════════════════════════════
     case "/ps": {
       try {
         const { execSync } = await import("node:child_process")
@@ -1839,6 +2007,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ДОКУМЕНТАЦИЯ
+    // ═══════════════════════════════════════════════════
     case "/docs": {
       console.log(dim("\n  Генерирую документацию...\n"))
       await runTurn(`Сгенерируй документацию для этого проекта. Включи: описание, установку, использование, API.`)
@@ -1869,6 +2041,10 @@ async function handleCommand(line) {
       await runTurn(`Проведи через мастер настройки этого проекта. Определи стек, настрой окружение, проверь зависимости.`)
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  СЕССИИ
+    // ═══════════════════════════════════════════════════
     case "/save": {
       const savePath = arg || path.join(CONFIG_DIR, `session-${Date.now()}.json`)
       const session = { model: state.model, messages: state.messages, savedAt: new Date().toISOString() }
@@ -1906,6 +2082,10 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ДОПОЛНИТЕЛЬНО
+    // ═══════════════════════════════════════════════════
     case "/color":
     case "/theme": {
       console.log(box([
@@ -1955,23 +2135,27 @@ async function handleCommand(line) {
       return
     }
     case "/feedback": {
-      console.log(dim("\n  Отправь отзыв: ") + cyan("https:
+      console.log(dim("\n  Отправь отзыв: ") + cyan("https://github.com/anomalyco/opencode/issues\n"))
       return
     }
     case "/report": {
-      console.log(dim("\n  Сообщи об ошибке: ") + cyan("https:
+      console.log(dim("\n  Сообщи об ошибке: ") + cyan("https://github.com/anomalyco/opencode/issues\n"))
       return
     }
     case "/support": {
       console.log(box([
-        dim("Документация:  ") + cyan("https:
-        dim("GitHub:        ") + cyan("https:
-        dim("Issues:        ") + cyan("https:
-        dim("Discord:       ") + cyan("https:
+        dim("Документация:  ") + cyan("https://opencode.ai/docs"),
+        dim("GitHub:        ") + cyan("https://github.com/anomalyco/opencode"),
+        dim("Issues:        ") + cyan("https://github.com/anomalyco/opencode/issues"),
+        dim("Discord:       ") + cyan("https://discord.gg/opencode"),
       ], { title: "Поддержка", padding: 2 }))
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  УПРАВЛЕНИЕ КОМПЬЮТЕРОМ
+    // ═══════════════════════════════════════════════════
     case "/open":
     case "/app": {
       if (!arg) { console.log(dim("\n  Использование: /open <приложение или URL>\n")); return }
@@ -1990,7 +2174,7 @@ async function handleCommand(line) {
         "registry": "regedit.exe", "реестр": "regedit.exe",
       }
       const appName = appMap[arg.toLowerCase()] || arg
-      if (arg.startsWith("http:
+      if (arg.startsWith("http://") || arg.startsWith("https://")) {
         try { execSync(`start "" "${arg}"`, { shell: "cmd.exe", stdio: "pipe" }); console.log(green(`\n  ✓ Открыто: ${arg}\n`)) }
         catch (e) { console.log(red(`\n  ✗ Ошибка: ${e.message}\n`)) }
       } else {
@@ -2006,19 +2190,19 @@ async function handleCommand(line) {
       return
     }
     case "/kinopoisk": {
-      const kpUrl = arg ? `https:
+      const kpUrl = arg ? `https://www.kinopoisk.ru/index.php?what=${encodeURIComponent(arg)}` : "https://www.kinopoisk.ru"
       try { execSync(`start "" "${kpUrl}"`, { shell: "cmd.exe", stdio: "pipe" }); console.log(green(`\n  ✓ Кинопоиск открыт${arg ? `: ${arg}` : ""}\n`)) }
       catch (e) { console.log(red(`\n  ✗ Ошибка: ${e.message}\n`)) }
       return
     }
     case "/youtube": {
-      const ytUrl = arg ? `https:
+      const ytUrl = arg ? `https://www.youtube.com/results?search_query=${encodeURIComponent(arg)}` : "https://www.youtube.com"
       try { execSync(`start "" "${ytUrl}"`, { shell: "cmd.exe", stdio: "pipe" }); console.log(green(`\n  ✓ YouTube открыт${arg ? `: ${arg}` : ""}\n`)) }
       catch (e) { console.log(red(`\n  ✗ Ошибка: ${e.message}\n`)) }
       return
     }
     case "/google": {
-      const gUrl = arg ? `https:
+      const gUrl = arg ? `https://www.google.com/search?q=${encodeURIComponent(arg)}` : "https://www.google.com"
       try { execSync(`start "" "${gUrl}"`, { shell: "cmd.exe", stdio: "pipe" }); console.log(green(`\n  ✓ Google открыт${arg ? `: ${arg}` : ""}\n`)) }
       catch (e) { console.log(red(`\n  ✗ Ошибка: ${e.message}\n`)) }
       return
@@ -2131,6 +2315,10 @@ async function handleCommand(line) {
       } catch { console.log(dim("\n  Файлы не найдены\n")) }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  СЕРВЕР И ТЕРМИНАЛ
+    // ═══════════════════════════════════════════════════
     case "/exec":
     case "/shell": {
       if (!arg) { console.log(dim("\n  Использование: /exec <команда>\n")); return }
@@ -2202,13 +2390,16 @@ async function handleCommand(line) {
         const cpu = execSync("wmic cpu get loadpercentage /value", { encoding: "utf8", stdio: "pipe" })
         const cpuMatch = cpu.match(/LoadPercentage=(\d+)/)
         const cpuVal = cpuMatch ? parseInt(cpuMatch[1]) : 0
+
         const mem = execSync("wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /value", { encoding: "utf8", stdio: "pipe" })
         const totalMatch = mem.match(/TotalVisibleMemorySize=(\d+)/)
         const freeMatch = mem.match(/FreePhysicalMemory=(\d+)/)
         const total = totalMatch ? parseInt(totalMatch[1]) / 1024 / 1024 : 0
         const free = freeMatch ? parseInt(freeMatch[1]) / 1024 / 1024 : 0
+
         const ports = execSync("netstat -ano | findstr LISTENING", { encoding: "utf8", timeout: 5000, stdio: "pipe" })
         const listening = ports.split("\n").filter(l => l.trim()).length
+
         console.log(box([
           dim("CPU:       ") + (cpuVal > 80 ? red(cpuVal + "%") : cpuVal > 50 ? yellow(cpuVal + "%") : green(cpuVal + "%")),
           dim("Память:    ") + white(`${(total - free).toFixed(1)} / ${total.toFixed(1)} GB (${((total - free) / total * 100).toFixed(0)}%)`),
@@ -2451,6 +2642,10 @@ async function handleCommand(line) {
       } catch (e) { console.log(red(`\n  ✗ Ошибка: ${e.message}\n`)) }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  УМНЫЙ ДОМ
+    // ═══════════════════════════════════════════════════
     case "/tv": {
       if (!arg) {
         console.log(box([
@@ -2471,69 +2666,79 @@ async function handleCommand(line) {
       }
       const tvParts = arg.split(/\s+/)
       const tvAction = tvParts[0]
+
       if (tvAction === "discover") {
         console.log(cyan("\n  Сканирую сеть на Sony TV...\n"))
         await runTurn("Найди Sony BRAVIA TV в локальной сети используя SSDP M-SEARCH. Верни IP адреса найденных телевизоров.")
         return
       }
+
       if (tvParts.length < 2) { console.log(dim("\n  Укажи IP TV. Пример: /tv off 192.168.1.100\n")); return }
       const tvIp = tvParts[1]
+
       if (tvAction === "off" || tvAction === "poweroff") {
         console.log(cyan(`\n  Выключаю TV ${tvIp}...\n`))
-        await runTurn(`Выключи Sony BRAVIA TV по IP ${tvIp}. Используй REST API метод setPowerStatus с параметром status:false на http:
+        await runTurn(`Выключи Sony BRAVIA TV по IP ${tvIp}. Используй REST API метод setPowerStatus с параметром status:false на http://${tvIp}/sony/videoControl. Если нужен PSK, попроси пользователя.`)
         return
       }
+
       if (tvAction === "on" || tvAction === "poweron") {
         console.log(cyan(`\n  Включаю TV ${tvIp}...\n`))
-        await runTurn(`Включи Sony BRAVIA TV по IP ${tvIp}. Используй REST API метод setPowerStatus с параметром status:true на http:
+        await runTurn(`Включи Sony BRAVIA TV по IP ${tvIp}. Используй REST API метод setPowerStatus с параметром status:true на http://${tvIp}/sony/videoControl. Если нужен PSK, попроси пользователя.`)
         return
       }
+
       if (tvAction === "info") {
         console.log(cyan(`\n  Получаю информацию о TV ${tvIp}...\n`))
-        await runTurn(`Получи информацию о Sony BRAVIA TV по IP ${tvIp}. Используй REST API на http:
+        await runTurn(`Получи информацию о Sony BRAVIA TV по IP ${tvIp}. Используй REST API на http://${tvIp}/sony/videoControl: getPowerStatus, getCurrentExternalInputsStatus, getVolumeInformation.`)
         return
       }
+
       if (tvAction === "vol") {
         const volArg = tvParts[2] || "+1"
         console.log(cyan(`\n  Регулирую громкость ${tvIp}: ${volArg}\n`))
-        await runTurn(`Установи громкость Sony TV по IP ${tvIp} на ${volArg}. Используй REST API метод setAudioVolume на http:
+        await runTurn(`Установи громкость Sony TV по IP ${tvIp} на ${volArg}. Используй REST API метод setAudioVolume на http://${tvIp}/sony/videoControl.`)
         return
       }
+
       if (tvAction === "ch") {
         const ch = tvParts[2] || "1"
         console.log(cyan(`\n  Переключаю канал на ${tvIp}: ${ch}\n`))
-        await runTurn(`Переключи канал на Sony TV по IP ${tvIp} на канал ${ch}. Используй REST API метод setChannelPosition на http:
+        await runTurn(`Переключи канал на Sony TV по IP ${tvIp} на канал ${ch}. Используй REST API метод setChannelPosition на http://${tvIp}/sony/videoControl.`)
         return
       }
+
       if (tvAction === "hdmi") {
         const hdmi = tvParts[2] || "1"
         console.log(cyan(`\n  Переключаю HDMI ${tvIp}: порт ${hdmi}\n`))
-        await runTurn(`Переключи Sony TV по IP ${tvIp} на HDMI ${hdmi}. Используй REST API метод setPlayContent с uri extInput:hdmi?port=${hdmi} на http:
+        await runTurn(`Переключи Sony TV по IP ${tvIp} на HDMI ${hdmi}. Используй REST API метод setPlayContent с uri extInput:hdmi?port=${hdmi} на http://${tvIp}/sony/videoControl.`)
         return
       }
+
+      // Remote control
       console.log(cyan(`\n  Команда пульта: ${tvAction} на ${tvIp}\n`))
-      await runTurn(`Отправь команду пульта "${tvAction}" на Sony TV по IP ${tvIp}. Используй REST API на http:
+      await runTurn(`Отправь команду пульта "${tvAction}" на Sony TV по IP ${tvIp}. Используй REST API на http://${tvIp}/sony/videoControl.`)
       return
     }
     case "/tv-off": {
       const ip = arg || ""
       if (!ip) { console.log(dim("\n  Использование: /tv-off <IP TV>\n")); return }
       console.log(cyan(`\n  Выключаю TV ${ip}...\n`))
-      await runTurn(`Выключи Sony BRAVIA TV по IP ${ip}. Используй REST API метод setPowerStatus с параметром status:false на http:
+      await runTurn(`Выключи Sony BRAVIA TV по IP ${ip}. Используй REST API метод setPowerStatus с параметром status:false на http://${ip}/sony/videoControl.`)
       return
     }
     case "/tv-on": {
       const ip = arg || ""
       if (!ip) { console.log(dim("\n  Использование: /tv-on <IP TV>\n")); return }
       console.log(cyan(`\n  Включаю TV ${ip}...\n`))
-      await runTurn(`Включи Sony BRAVIA TV по IP ${ip}. Используй REST API метод setPowerStatus с параметром status:true на http:
+      await runTurn(`Включи Sony BRAVIA TV по IP ${ip}. Используй REST API метод setPowerStatus с параметром status:true на http://${ip}/sony/videoControl.`)
       return
     }
     case "/tv-info": {
       const ip = arg || ""
       if (!ip) { console.log(dim("\n  Использование: /tv-info <IP TV>\n")); return }
       console.log(cyan(`\n  Получаю информацию о TV ${ip}...\n`))
-      await runTurn(`Получи информацию о Sony BRAVIA TV по IP ${ip}. Используй REST API: getPowerStatus, getCurrentExternalInputsStatus, getVolumeInformation на http:
+      await runTurn(`Получи информацию о Sony BRAVIA TV по IP ${ip}. Используй REST API: getPowerStatus, getCurrentExternalInputsStatus, getVolumeInformation на http://${ip}/sony/videoControl.`)
       return
     }
     case "/cec": {
@@ -2570,11 +2775,16 @@ async function handleCommand(line) {
       await runTurn(`Включи устройство с MAC адресом ${arg} через Wake-on-LAN. Отправь magic packet на широковещательный адрес порт 9.`)
       return
     }
+
     case "/exit":
     case "/quit": {
       goodbye()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ПРЕЗЕНТАЦИИ
+    // ═══════════════════════════════════════════════════
     case "/presentation": {
       if (!arg) {
         console.log(dim("\n  Использование: /presentation <тема> [тема_оформления]\n"))
@@ -2584,14 +2794,17 @@ async function handleCommand(line) {
       const parts = arg.split(/\s+/)
       const topic = parts[0]
       const theme = parts[1] || "modern"
+      
       console.log()
       startSpinner("Создаю презентацию")
+      
       try {
         const result = createPresentationFromTopic(topic, {
           theme,
           slidesCount: 8,
           author: "Stella Coder",
         })
+        
         stopSpinner()
         console.log(box([
           green("✓ Презентация создана!"),
@@ -2605,6 +2818,8 @@ async function handleCommand(line) {
           white("Откройте index.html в браузере для просмотра"),
         ], { title: "Презентация", color: green, padding: 2 }))
         console.log()
+        
+        // Open in browser
         const openBrowser = await question("  " + green("Открыть в браузере? (y/n) › "))
         if (openBrowser.trim().toLowerCase() === "y" || openBrowser.trim().toLowerCase() === "д") {
           try {
@@ -2621,6 +2836,7 @@ async function handleCommand(line) {
       }
       return
     }
+
     case "/presentation-theme": {
       console.log(box([
         ...AVAILABLE_THEMES.map(t =>
@@ -2630,38 +2846,49 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/presentation-custom": {
       console.log(dim("\n  Создание кастомной презентации"))
       console.log(dim("  Введите данные для каждого слайда:\n"))
+      
       const title = await question("  " + green("Заголовок презентации › "))
       if (!title.trim()) {
         console.log(red("  Заголовок не может быть пустым\n"))
         return
       }
+      
       const author = await question("  " + green("Автор › "))
       const themeChoice = await question("  " + green("Тема (modern/elegant/creative/minimal/tech) › "))
       const theme = themeChoice.trim() || "modern"
+      
       const slides = []
       let slideNum = 1
+      
       while (true) {
         console.log(dim(`\n  Слайд ${slideNum}:`))
         const slideTitle = await question("  " + green("Заголовок слайда (пусто для завершения) › "))
         if (!slideTitle.trim()) break
+        
         const slideType = await question("  " + green("Тип (content/twoColumn/quote) › "))
         const slideContent = await question("  " + green("Содержимое (через запятую) › "))
+        
         slides.push({
           type: slideType.trim() || "content",
           title: slideTitle.trim(),
           items: slideContent.split(",").map(i => i.trim()).filter(i => i),
         })
+        
         slideNum++
       }
+      
       if (slides.length === 0) {
         console.log(red("  Не добавлено ни одного слайда\n"))
         return
       }
+      
       console.log()
       startSpinner("Создаю кастомную презентацию")
+      
       try {
         const result = generatePresentation({
           title: title.trim(),
@@ -2670,6 +2897,7 @@ async function handleCommand(line) {
           theme,
           outputDir: `presentation-${title.trim().toLowerCase().replace(/\s+/g, '-')}`,
         })
+        
         stopSpinner()
         console.log(box([
           green("✓ Кастомная презентация создана!"),
@@ -2688,10 +2916,12 @@ async function handleCommand(line) {
       }
       return
     }
+
     case "/presentation-list": {
       const outputDirs = fs.readdirSync(process.cwd()).filter(f => 
         f.startsWith("presentation-") && fs.statSync(f).isDirectory()
       )
+      
       if (outputDirs.length === 0) {
         console.log(dim("\n  Нет созданных презентаций\n"))
       } else {
@@ -2704,22 +2934,27 @@ async function handleCommand(line) {
       }
       return
     }
+
     case "/presentation-export": {
       if (!arg) {
         console.log(dim("\n  Использование: /presentation-export <путь_к_презентации>\n"))
         console.log(dim("  Пример: /presentation-export presentation-моя-презентация\n"))
         return
       }
+      
       const presentationDir = arg.trim()
       if (!fs.existsSync(presentationDir)) {
         console.log(red(`  ✗ Директория не найдена: ${presentationDir}\n`))
         return
       }
+      
       console.log()
       startSpinner("Создаю версию для печати")
+      
       try {
         const result = exportToPDF(presentationDir)
         stopSpinner()
+        
         console.log(box([
           green("✓ Версия для печати создана!"),
           "",
@@ -2729,6 +2964,8 @@ async function handleCommand(line) {
           white("Используйте Ctrl+P для экспорта в PDF"),
         ], { title: "Экспорт в PDF", color: green, padding: 2 }))
         console.log()
+        
+        // Open print version
         const openPrint = await question("  " + green("Открыть версию для печати? (y/n) › "))
         if (openPrint.trim().toLowerCase() === "y" || openPrint.trim().toLowerCase() === "д") {
           try {
@@ -2744,11 +2981,16 @@ async function handleCommand(line) {
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  CODING BRAIN
+    // ═══════════════════════════════════════════════════
     case "/brain": {
       console.log()
       startSpinner("Анализирую проект")
       const diag = diagnoseProject(process.cwd())
       stopSpinner()
+
       console.log(box([
         dim("Репозиторий:  ") + white(diag.repo),
         dim("SPEC:         ") + (diag.spec !== "not found" ? green(diag.spec) : yellow("не найден")),
@@ -2765,11 +3007,13 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/brain-map": {
       console.log()
       startSpinner("Строю карту репозитория")
       const map = buildRepoMap(process.cwd())
       stopSpinner()
+
       console.log(box([
         dim("Файлов: ") + white(String(map.fileCount)),
         dim("Размер: ") + white(map.totalSize),
@@ -2781,6 +3025,7 @@ async function handleCommand(line) {
           .map(([ext, count]) => `  ${violet(ext)} ${dim("—")} ${white(String(count))}`),
       ], { title: "Карта репозитория", color: cyan, padding: 2 }))
       console.log()
+
       const showTree = await question("  " + green("Показать дерево файлов? (y/n) › "))
       if (showTree.trim().toLowerCase() === "y") {
         console.log()
@@ -2790,27 +3035,33 @@ async function handleCommand(line) {
       }
       return
     }
+
     case "/brain-compress": {
       console.log()
       const msgCount = state.messages.length
       const chars = JSON.stringify(state.messages).length
       console.log(dim(`  Контекст: ${msgCount} сообщений, ${Math.round(chars / 1000)}K символов`))
+
       if (chars < COMPRESS_THRESHOLD) {
         console.log(green("  Контекст ещё не нуждается в сжатии\n"))
         return
       }
+
       const confirm = await question("  " + yellow(`Сжать контекст? (${Math.round(chars / 1000)}K → ~50K) (y/n) › `))
       if (confirm.trim().toLowerCase() !== "y") {
         console.log(dim("  Отмена\n"))
         return
       }
+
       startSpinner("Сжимаю контекст")
       state.messages = await compressContext(state.messages, getModel(state.model))
       stopSpinner()
+
       const newChars = JSON.stringify(state.messages).length
       console.log(green(`  ✓ Контекст сжат: ${Math.round(chars / 1000)}K → ${Math.round(newChars / 1000)}K\n`))
       return
     }
+
     case "/spec": {
       const spec = loadSpec(process.cwd())
       if (spec.exists) {
@@ -2833,20 +3084,24 @@ async function handleCommand(line) {
       }
       return
     }
+
     case "/tdd": {
       if (!arg) {
         console.log(dim("\n  Использование: /tdd <путь к файлу>\n"))
         return
       }
+
       const filePath = arg.trim()
       if (!fs.existsSync(filePath)) {
         console.log(red(`  ✗ Файл не найден: ${filePath}\n`))
         return
       }
+
       console.log()
       const fileContent = fs.readFileSync(filePath, "utf8")
       const spec = loadSpec(process.cwd())
       const testPrompt = generateTestPrompt(filePath, fileContent, spec.content)
+
       startSpinner("Генерирую тесты")
       try {
         const { text } = await generateText({
@@ -2854,9 +3109,13 @@ async function handleCommand(line) {
           messages: [{ role: "user", content: testPrompt.prompt }],
         })
         stopSpinner()
+
         const testFilePath = path.join(process.cwd(), testPrompt.testFile)
         fs.writeFileSync(testFilePath, text.replace(/```[\s\S]*?\n/g, "").replace(/```/g, "").trim())
+
         console.log(green(`  ✓ Тесты созданы: ${testPrompt.testFile}`))
+
+        // Run tests
         const framework = detectTestFramework(process.cwd())
         if (framework.detected) {
           startSpinner("Запускаю тесты")
@@ -2876,6 +3135,7 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/lint-auto": {
       console.log()
       const linter = detectLinter(process.cwd())
@@ -2883,14 +3143,17 @@ async function handleCommand(line) {
         console.log(yellow("  Линтер не обнаружен в проекте\n"))
         return
       }
+
       startSpinner(`Запускаю ${linter.name}`)
       const result = runLinter(process.cwd(), linter)
       stopSpinner()
+
       if (result.success && !result.hasErrors) {
         console.log(green(`  ✓ ${linter.name}: ошибок нет`))
       } else {
         console.log(yellow(`  ⚠ ${linter.name}: найдены проблемы`))
         console.log(dim(result.output?.slice(0, 1000) || ""))
+
         const fix = await question("  " + green("Автоматически исправить? (y/n) › "))
         if (fix.trim().toLowerCase() === "y") {
           startSpinner("Исправляю")
@@ -2906,6 +3169,7 @@ async function handleCommand(line) {
       }
       return
     }
+
     case "/format-auto": {
       console.log()
       const formatter = detectFormatter(process.cwd())
@@ -2913,9 +3177,11 @@ async function handleCommand(line) {
         console.log(yellow("  Форматер не обнаружен в проекте\n"))
         return
       }
+
       startSpinner(`Форматирую (${formatter.name})`)
       const result = runFormatter(process.cwd(), formatter)
       stopSpinner()
+
       if (result.success) {
         console.log(green(`  ✓ ${formatter.name}: код отформатирован`))
       } else {
@@ -2924,6 +3190,7 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/typecheck-auto": {
       console.log()
       const checker = detectTypeChecker(process.cwd())
@@ -2931,9 +3198,11 @@ async function handleCommand(line) {
         console.log(yellow("  Проверщик типов не обнаружен\n"))
         return
       }
+
       startSpinner(`Проверяю типы (${checker.name})`)
       const result = runTypeChecker(process.cwd(), checker)
       stopSpinner()
+
       if (result.success && !result.hasErrors) {
         console.log(green(`  ✓ ${checker.name}: ошибок нет`))
       } else {
@@ -2943,6 +3212,7 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/test-auto": {
       console.log()
       const framework = detectTestFramework(process.cwd())
@@ -2950,9 +3220,11 @@ async function handleCommand(line) {
         console.log(yellow("  Фреймворк тестов не обнаружен\n"))
         return
       }
+
       startSpinner(`Запускаю тесты (${framework.framework})`)
       const result = runTests(process.cwd(), framework)
       stopSpinner()
+
       if (result.success) {
         console.log(green("  ✓ Тесты пройдены!"))
         console.log(dim(result.output?.slice(-500) || ""))
@@ -2963,9 +3235,12 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/fix-all": {
       console.log()
       console.log(dim("  Полный цикл исправления: линтер → форматер → типы → тесты\n"))
+
+      // 1. Linter
       const linter = detectLinter(process.cwd())
       if (linter.detected) {
         startSpinner(`Линтер (${linter.name})`)
@@ -2973,6 +3248,8 @@ async function handleCommand(line) {
         stopSpinner()
         console.log(green(`  ✓ ${linter.name} выполнен`))
       }
+
+      // 2. Formatter
       const formatter = detectFormatter(process.cwd())
       if (formatter.detected) {
         startSpinner(`Форматер (${formatter.name})`)
@@ -2980,6 +3257,8 @@ async function handleCommand(line) {
         stopSpinner()
         console.log(green(`  ✓ ${formatter.name} выполнен`))
       }
+
+      // 3. Type checker
       const checker = detectTypeChecker(process.cwd())
       if (checker.detected) {
         startSpinner(`Типы (${checker.name})`)
@@ -2991,6 +3270,8 @@ async function handleCommand(line) {
           console.log(yellow(`  ⚠ ${checker.name}: есть ошибки`))
         }
       }
+
+      // 4. Tests
       const framework = detectTestFramework(process.cwd())
       if (framework.detected) {
         startSpinner(`Тесты (${framework.framework})`)
@@ -3002,9 +3283,11 @@ async function handleCommand(line) {
           console.log(red("  ✗ Тесты упали"))
         }
       }
+
       console.log(green("\n  ✓ Полный цикл завершён\n"))
       return
     }
+
     case "/git-eco": {
       console.log()
       startSpinner("Собираю Git-информацию")
@@ -3012,6 +3295,7 @@ async function handleCommand(line) {
       const branches = gitBranches(process.cwd())
       const log = gitLog(process.cwd(), 10)
       stopSpinner()
+
       console.log(box([
         dim("Ветка:     ") + violet(git.branch),
         dim("Статус:    ") + (git.clean ? green("чисто") : yellow(`${git.files.length} изменений`)),
@@ -3022,6 +3306,7 @@ async function handleCommand(line) {
         dim("Ветки:"),
         ...branches.slice(0, 10).map(b => `  ${b.includes("*") ? green(b) : dim(b)}`),
       ], { title: "Git Экосистема", color: cyan, padding: 2 }))
+
       if (log) {
         console.log(dim("\nПоследние коммиты:"))
         log.split("\n").slice(0, 5).forEach(l => console.log(dim("  ") + l))
@@ -3029,15 +3314,18 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/git-pr": {
       console.log()
       const title = await question("  " + green("Название PR › "))
       if (!title.trim()) { console.log(red("  Название не может быть пустым\n")); return }
       const body = await question("  " + green("Описание (необязательно) › "))
       const base = await question("  " + green("Базовая ветка (main) › "))
+
       startSpinner("Создаю Pull Request")
       const result = gitCreatePR(process.cwd(), title.trim(), body || title.trim(), base.trim() || "main")
       stopSpinner()
+
       if (result.success) {
         console.log(green(`  ✓ PR создан: ${result.url}`))
       } else {
@@ -3046,21 +3334,25 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/git-merge-auto": {
       if (!arg) {
         console.log(dim("\n  Использование: /git-merge-auto <ветка>\n"))
         return
       }
+
       const branch = arg.trim()
       console.log()
       startSpinner(`Мержу ${branch}`)
       const result = gitMerge(process.cwd(), branch)
       stopSpinner()
+
       if (result.success) {
         console.log(green(`  ✓ ${branch} успешно смержена`))
       } else if (result.conflict) {
         console.log(yellow(`  ⚠ Конфликт в ${result.files.length} файлах:`))
         result.files.forEach(f => console.log(dim(`    - ${f}`)))
+
         const resolve = await question("  " + green("Разрешить конфликты (theirs)? (y/n) › "))
         if (resolve.trim().toLowerCase() === "y") {
           startSpinner("Разрешаю конфликты")
@@ -3078,11 +3370,16 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  TELEGRAM BOT
+    // ═══════════════════════════════════════════════════
     case "/tg": {
       console.log()
       startSpinner("Запускаю Telegram бота")
       const botResult = await startBot()
       stopSpinner()
+
       if (botResult) {
         const status = getBotStatus()
         console.log(box([
@@ -3100,12 +3397,14 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/tg-stop": {
       console.log()
       await stopBot()
       console.log(green("  ✓ Telegram бот остановлен\n"))
       return
     }
+
     case "/tg-notify": {
       if (!arg) {
         console.log(dim("\n  Использование: /tg-notify <сообщение>\n"))
@@ -3118,10 +3417,12 @@ async function handleCommand(line) {
       console.log(green("  ✓ Уведомление отправлено всем пользователям\n"))
       return
     }
+
     case "/tg-sessions": {
       console.log()
       const status = getBotStatus()
       const sessions = status.sessions.sessions
+
       if (sessions.length === 0) {
         console.log(dim("  Нет Telegram сессий\n"))
       } else {
@@ -3134,15 +3435,20 @@ async function handleCommand(line) {
         ], { title: "Telegram Sessions", color: blue, padding: 2 }))
       }
       console.log()
+
+      // Show auth info
       const authUsers = Object.keys(status.auth.users).length
       console.log(dim(`  Авторизовано пользователей: ${authUsers}`))
       console.log()
       return
     }
+
     case "/tg-verify": {
       if (!arg) {
+        // Show pending codes
         const pending = getPendingCodes()
         const pendingList = Object.entries(pending)
+
         if (pendingList.length === 0) {
           console.log(dim("\n  Нет ожидающих кодов. Пользователь должен нажать /start в Telegram.\n"))
         } else {
@@ -3157,11 +3463,13 @@ async function handleCommand(line) {
         console.log()
         return
       }
+
       const code = arg.trim()
       console.log()
       startSpinner("Проверяю код")
       const result = verifyAuthCode(code)
       stopSpinner()
+
       if (result.success) {
         console.log(box([
           green("✓ Telegram аккаунт привязан!"),
@@ -3171,6 +3479,8 @@ async function handleCommand(line) {
           "",
           white("Теперь вы можете управлять компьютером через Telegram!"),
         ], { title: "Привязка", color: green, padding: 2 }))
+
+        // Send confirmation to Telegram
         await notifyUser(result.chatId, "✅ <b>Аккаунт привязан!</b>\n\nТеперь вы можете управлять компьютером через Telegram.")
       } else {
         console.log(red(`  ✗ ${result.error}\n`))
@@ -3178,11 +3488,13 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/tg-code": {
       console.log()
       startSpinner("Генерирую код")
       const code = generateAdminCode()
       stopSpinner()
+
       console.log(box([
         green("✓ Код сгенерирован!"),
         "",
@@ -3197,9 +3509,11 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/tg-users": {
       console.log()
       const users = listAuthorizedUsers()
+
       if (users.length === 0) {
         console.log(dim("\n  Нет подключённых пользователей\n"))
       } else {
@@ -3213,6 +3527,10 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  AUTONOMOUS AGENT
+    // ═══════════════════════════════════════════════════
     case "/auto": {
       if (!arg) {
         console.log(dim("\n  Использование: /auto <цель>\n"))
@@ -3220,8 +3538,10 @@ async function handleCommand(line) {
         console.log(dim("  Агент будет работать автономно пока не выполнит цель.\n"))
         return
       }
+
       const goal = arg.trim()
       const agent = new AutonomousAgent()
+
       console.log()
       console.log(box([
         violet("🤖 AUTONOMOUS AGENT"),
@@ -3234,15 +3554,18 @@ async function handleCommand(line) {
         dim("Используй /auto-status для проверки прогресса."),
       ], { color: violet, padding: 2 }))
       console.log()
+
       const confirm = await question("  " + green("Начать автономное выполнение? (y/n) › "))
       if (confirm.trim().toLowerCase() !== "y" && confirm.trim().toLowerCase() !== "д") {
         console.log(dim("  Отменено\n"))
         return
       }
+
       console.log()
       startSpinner("Составляю план выполнения")
       const plan = agent.planGoal(goal)
       stopSpinner()
+
       console.log(box([
         green("✓ План создан!"),
         "",
@@ -3251,6 +3574,7 @@ async function handleCommand(line) {
         dim(`Всего шагов: ${plan.steps.length}`),
       ], { title: "План", color: green, padding: 2 }))
       console.log()
+
       const apiCall = async (prompt) => {
         const model = getModel(state.model)
         const { text } = await generateText({
@@ -3260,11 +3584,14 @@ async function handleCommand(line) {
         })
         return text
       }
+
       console.log(dim("  Запускаю автономный режим...\n"))
+
       agent.state.running = true
       agent.state.startedAt = new Date().toISOString()
       agent.state.goal = goal
       agent.save()
+
       let stepCount = 0
       const runAuto = async () => {
         while (agent.state.running) {
@@ -3277,6 +3604,7 @@ async function handleCommand(line) {
             }
             console.log(dim("  ") + violet("→") + " " + white(msg))
           })
+
           if (!result) {
             agent.state.running = false
             agent.save()
@@ -3285,20 +3613,25 @@ async function handleCommand(line) {
             console.log(dim("  Dashboard: ~/.stella/autonomous/dashboard.html\n"))
             break
           }
+
           stepCount++
           if (stepCount % 5 === 0) {
             console.log(dim(`  [${stepCount} шагов выполнено]`))
           }
+
           await new Promise(r => setTimeout(r, 1000))
         }
       }
+
       runAuto().catch(err => {
         console.log(red(`\n  ✗ Ошибка: ${err.message}\n`))
         agent.state.running = false
         agent.save()
       })
+
       return
     }
+
     case "/auto-stop": {
       console.log()
       const agent = new AutonomousAgent()
@@ -3313,14 +3646,17 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/auto-status": {
       console.log()
       const agent = new AutonomousAgent()
       const status = agent.getStatus()
+
       if (!status.running && !status.currentPlan) {
         console.log(dim("  Агент не запущен. Используй /auto <цель> для запуска.\n"))
         return
       }
+
       const items = [
         dim("Статус:     ") + (status.running ? green("● RUNNINg") : red("○ STOPPED")),
         dim("Цель:       ") + white(status.goal || "Нет"),
@@ -3333,6 +3669,7 @@ async function handleCommand(line) {
         dim("Заработано:       ") + green("$" + status.totalEarnings.toFixed(2)),
         dim("Аккаунтов:        ") + cyan(String(status.accounts)),
       ]
+
       if (status.currentPlan) {
         items.push("", violet("Текущий план: ") + white(status.currentPlan.goal))
         items.push(dim("Прогресс:"))
@@ -3341,10 +3678,12 @@ async function handleCommand(line) {
           items.push(`  ${icon} ${step.name} ${dim(`(${step.done}/${step.total})`)}`)
         }
       }
+
       console.log(box(items, { title: "🤖 Autonomous Agent Status", color: violet, padding: 2 }))
       console.log()
       return
     }
+
     case "/auto-dashboard": {
       console.log()
       const agent = new AutonomousAgent()
@@ -3353,6 +3692,7 @@ async function handleCommand(line) {
       stopSpinner()
       console.log(green(`  ✓ Dashboard создан: ${path}`))
       console.log(dim("  Откройте в браузере для просмотра результатов\n"))
+
       const openIt = await question("  " + green("Открыть dashboard? (y/n) › "))
       if (openIt.trim().toLowerCase() === "y" || openIt.trim().toLowerCase() === "д") {
         try {
@@ -3364,14 +3704,17 @@ async function handleCommand(line) {
       console.log()
       return
     }
+
     case "/auto-history": {
       console.log()
       const agent = new AutonomousAgent()
       const allPlans = agent.tasks.queue
+
       if (allPlans.length === 0) {
         console.log(dim("  Нет истории. Используй /auto <цель> для запуска.\n"))
         return
       }
+
       console.log(box([
         ...allPlans.map(p => {
           const icon = p.status === "completed" ? green("✓") : p.status === "failed" ? red("✗") : yellow("●")
@@ -3379,21 +3722,30 @@ async function handleCommand(line) {
         }),
       ], { title: "История автономных задач", color: violet, padding: 2 }))
       console.log()
+
+      // Show memory stats
       console.log(dim(`  Всего проектов: ${agent.memory.projects.length}`))
       console.log(dim(`  Аккаунтов: ${agent.memory.accounts.length}`))
       console.log(dim(`  Уроков: ${agent.memory.lessons.length}`))
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  COMPUTER VISION MONITOR
+    // ═══════════════════════════════════════════════════
     case "/monitor": {
       console.log()
       const monitor = new ScreenMonitor()
+
       if (monitor.state.running) {
         console.log(yellow("  Мониторинг уже запущен! Используй /monitor-stop для остановки.\n"))
         return
       }
+
       const intervalSec = arg ? parseInt(arg) || 2 : 2
       const intervalMs = intervalSec * 1000
+
       console.log(box([
         violet("👁️  COMPUTER VISION MONITOR"),
         "",
@@ -3405,22 +3757,27 @@ async function handleCommand(line) {
         dim("Все обнаруженные проблемы будут сохранены в лог."),
       ], { color: violet, padding: 2 }))
       console.log()
+
       const confirmMonitor = await question("  " + green("Запустить мониторинг? (y/n) › "))
       if (confirmMonitor.trim().toLowerCase() !== "y" && confirmMonitor.trim().toLowerCase() !== "д") {
         console.log(dim("  Отменено\n"))
         return
       }
+
       const visionFn = async (imageBase64, recentContext) => {
         const contextStr = recentContext?.length > 0
           ? `\nRecent history:\n${recentContext.map(r => `- ${r.time}: ${r.summary} (${r.alerts} alerts)`).join("\n")}`
           : ""
+
         const prompt = `Analyze this screenshot. Detect:
 1. Error messages, crash dialogs, exception windows
 2. Alert popups, warning notifications
 3. Application crashes or "not responding" dialogs
 4. System errors, BSOD, kernel panics
 5. Any other issues or anomalies
+
 ${contextStr}
+
 Return JSON:
 {
   "summary": "one-line description of what's on screen",
@@ -3429,7 +3786,9 @@ Return JSON:
   "severity": "none|info|warning|critical",
   "recommendations": ["what to do about issues"]
 }
+
 If everything looks normal, set severity to "none" and issues to [].`
+
         const model = getModel(state.model)
         const { text } = await generateText({
           model,
@@ -3442,6 +3801,7 @@ If everything looks normal, set severity to "none" and issues to [].`
           }],
           maxTokens: 2000,
         })
+
         try {
           let clean = text.trim()
           if (clean.startsWith("```")) clean = clean.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
@@ -3450,16 +3810,20 @@ If everything looks normal, set severity to "none" and issues to [].`
           return { summary: text.slice(0, 200), text, issues: [], severity: "none", recommendations: [] }
         }
       }
+
       console.log()
       startSpinner("Запускаю мониторинг")
       const result = monitor.start(intervalMs, visionFn)
       stopSpinner()
+
       if (result.success) {
         console.log(green(`  ✓ Мониторинг запущен! Интервал: ${intervalSec}с`))
         console.log(dim("  Скриншоты сохраняются в ~/.stella/monitor/screenshots/"))
         console.log(dim("  Используй /monitor-stop для остановки"))
         console.log(dim("  Используй /monitor-status для проверки"))
         console.log(dim("  Используй /monitor-alerts для просмотра проблем\n"))
+
+        // Show first capture
         console.log(dim("  Делаю первый скриншот..."))
         const firstCapture = await monitor.captureAndAnalyze(visionFn)
         if (firstCapture.success) {
@@ -3477,6 +3841,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       }
       return
     }
+
     case "/monitor-stop": {
       console.log()
       const monitor = new ScreenMonitor()
@@ -3491,14 +3856,17 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/monitor-status": {
       console.log()
       const monitor = new ScreenMonitor()
       const status = monitor.getStatus()
+
       if (!status.running && status.totalCaptures === 0) {
         console.log(dim("  Мониторинг не запущен. Используй /monitor для запуска.\n"))
         return
       }
+
       const items = [
         dim("Статус:     ") + (status.running ? green("● RUNNING") : red("○ STOPPED")),
         dim("Интервал:   ") + cyan(`every ${status.interval / 1000}s`),
@@ -3507,6 +3875,7 @@ If everything looks normal, set severity to "none" and issues to [].`
         dim("Алертов:    ") + (status.totalAlerts > 0 ? red(String(status.totalAlerts)) : green("0")),
         dim("PID:        ") + white(String(status.pid || "—")),
       ]
+
       if (status.recentAlerts.length > 0) {
         items.push("", violet("Последние алерты:"))
         for (const a of status.recentAlerts.slice(-5)) {
@@ -3515,6 +3884,7 @@ If everything looks normal, set severity to "none" and issues to [].`
           if (a.description) items.push(dim(`     ${a.description.slice(0, 100)}`))
         }
       }
+
       if (status.recentCaptures.length > 0) {
         items.push("", dim("Последние скриншоты:"))
         for (const c of status.recentCaptures) {
@@ -3522,18 +3892,22 @@ If everything looks normal, set severity to "none" and issues to [].`
           items.push(`  ${icon} [${new Date(c.time).toLocaleTimeString()}] ${c.summary}`)
         }
       }
+
       console.log(box(items, { title: "👁️ Monitor Status", color: violet, padding: 2 }))
       console.log()
       return
     }
+
     case "/monitor-alerts": {
       console.log()
       const monitor = new ScreenMonitor()
       const alerts = monitor.getAlerts()
+
       if (alerts.length === 0) {
         console.log(dim("  Нет обнаруженных проблем. Всё чисто! ✅\n"))
         return
       }
+
       console.log(box([
         violet(`Всего алертов: ${alerts.length}`),
         "",
@@ -3545,10 +3919,12 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/monitor-screenshot": {
       console.log()
       startSpinner("Делаю скриншот")
       const monitor = new ScreenMonitor()
+
       const visionFn = async (imageBase64) => {
         const prompt = `Analyze this screenshot in detail. What's on screen? Any errors, issues, or anomalies? Return JSON with "summary", "text", "issues", "severity".`
         const model = getModel(state.model)
@@ -3565,8 +3941,10 @@ If everything looks normal, set severity to "none" and issues to [].`
         })
         try { return JSON.parse(text) } catch { return { summary: text.slice(0, 200), text } }
       }
+
       const capture = await monitor.captureAndAnalyze(visionFn)
       stopSpinner()
+
       if (capture.success) {
         console.log(box([
           green("✓ Скриншот сделан!"),
@@ -3588,6 +3966,10 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  CHROME DEVTOOLS PROTOCOL (BROWSER CONTROL)
+    // ═══════════════════════════════════════════════════
     case "/browser": {
       console.log()
       const browser = new ChromeBrowser()
@@ -3614,6 +3996,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/browser-click": {
       if (!arg) { console.log(dim("\n  Usage: /browser-click <css-selector>\n")); return }
       const browser = new ChromeBrowser()
@@ -3622,6 +4005,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/browser-type": {
       if (!arg) { console.log(dim("\n  Usage: /browser-type <selector> <text>\n")); return }
       const [sel, ...textParts] = arg.split(" ")
@@ -3632,6 +4016,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/browser-scroll": {
       const browser = new ChromeBrowser()
       const delta = arg ? parseInt(arg) || 300 : 300
@@ -3639,6 +4024,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log(green(`  ✓ Scrolled ${delta}px\n`))
       return
     }
+
     case "/browser-screenshot": {
       const browser = new ChromeBrowser()
       const ss = await browser.screenshot()
@@ -3650,6 +4036,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       }
       return
     }
+
     case "/browser-links": {
       const browser = new ChromeBrowser()
       const links = await browser.getLinks()
@@ -3664,6 +4051,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/browser-forms": {
       const browser = new ChromeBrowser()
       const forms = await browser.getForms()
@@ -3680,12 +4068,17 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/browser-close": {
       const browser = new ChromeBrowser()
       browser.close()
       console.log(green("  ✓ Browser closed\n"))
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  GIT API (GitHub/GitLab)
+    // ═══════════════════════════════════════════════════
     case "/git-issues": {
       console.log()
       const api = new GitAPI()
@@ -3708,6 +4101,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/git-issue": {
       if (!arg) { console.log(dim("\n  Usage: /git-issue <title>\n")); return }
       const api = new GitAPI()
@@ -3722,6 +4116,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       }
       return
     }
+
     case "/git-prs": {
       console.log()
       const api = new GitAPI()
@@ -3743,6 +4138,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/git-pr-create": {
       if (!arg) { console.log(dim("\n  Usage: /git-pr-create <title>\n")); return }
       const api = new GitAPI()
@@ -3757,6 +4153,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       }
       return
     }
+
     case "/git-pr-review": {
       if (!arg) { console.log(dim("\n  Usage: /git-pr-review <number> <APPROVE|REQUEST_CHANGES|COMMENT>\n")); return }
       const [prNum, ...reviewParts] = arg.split(" ")
@@ -3770,6 +4167,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ Failed\n`))
       return
     }
+
     case "/git-pr-merge": {
       if (!arg) { console.log(dim("\n  Usage: /git-pr-merge <number>\n")); return }
       const api = new GitAPI()
@@ -3781,6 +4179,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ Failed\n`))
       return
     }
+
     case "/git-branches": {
       console.log()
       const api = new GitAPI()
@@ -3794,6 +4193,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/git-releases": {
       console.log()
       const api = new GitAPI()
@@ -3811,6 +4211,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/git-release": {
       if (!arg) { console.log(dim("\n  Usage: /git-release <tag> [name]\n")); return }
       const [tag, ...nameParts] = arg.split(" ")
@@ -3827,6 +4228,10 @@ If everything looks normal, set severity to "none" and issues to [].`
       }
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  WEB PARSER
+    // ═══════════════════════════════════════════════════
     case "/fetch": {
       if (!arg) { console.log(dim("\n  Usage: /fetch <url>\n")); return }
       console.log()
@@ -3849,6 +4254,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/fetch-text": {
       if (!arg) { console.log(dim("\n  Usage: /fetch-text <url>\n")); return }
       const parser = new WebParser()
@@ -3861,6 +4267,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/fetch-links": {
       if (!arg) { console.log(dim("\n  Usage: /fetch-links <url>\n")); return }
       const parser = new WebParser()
@@ -3873,6 +4280,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/fetch-images": {
       if (!arg) { console.log(dim("\n  Usage: /fetch-images <url>\n")); return }
       const parser = new WebParser()
@@ -3888,6 +4296,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/fetch-forms": {
       if (!arg) { console.log(dim("\n  Usage: /fetch-forms <url>\n")); return }
       const parser = new WebParser()
@@ -3903,6 +4312,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/fetch-seo": {
       if (!arg) { console.log(dim("\n  Usage: /fetch-seo <url>\n")); return }
       console.log()
@@ -3920,6 +4330,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/web-search": {
       if (!arg) { console.log(dim("\n  Usage: /web-search <query>\n")); return }
       console.log()
@@ -3939,6 +4350,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/web-batch": {
       if (!arg) { console.log(dim("\n  Usage: /web-batch <url1> <url2> ...\n")); return }
       const urls = arg.split(/\s+/).filter(Boolean)
@@ -3958,6 +4370,11 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
+
+    // ═══════════════════════════════════════════════════
+    //  GMAIL
+    // ═══════════════════════════════════════════════════
     case "/gmail-setup": {
       console.log()
       const gmail = new GmailClient()
@@ -3966,7 +4383,7 @@ If everything looks normal, set severity to "none" and issues to [].`
         console.log(box([
           yellow("Требуется файл credentials.json"),
           "",
-          dim("1. Создай проект в https:
+          dim("1. Создай проект в https://console.cloud.google.com"),
           dim("2. Включи Gmail API"),
           dim("3. Скачай credentials.json (OAuth 2.0 Client ID)"),
           dim("4. Сохрани в ~/.stella/gmail/credentials.json"),
@@ -3984,6 +4401,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gmail-auth": {
       if (!arg) { console.log(dim("\n  Usage: /gmail-auth <code>\n")); return }
       const gmail = new GmailClient()
@@ -3992,6 +4410,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/gmail-send": {
       if (!arg) { console.log(dim("\n  Usage: /gmail-send <to> | <subject> | <body>\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4005,6 +4424,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/gmail-inbox": {
       console.log()
       const gmail = new GmailClient()
@@ -4021,6 +4441,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gmail-search": {
       if (!arg) { console.log(dim("\n  Usage: /gmail-search <query>\n")); return }
       console.log()
@@ -4038,6 +4459,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gmail-read": {
       if (!arg) { console.log(dim("\n  Usage: /gmail-read <messageId>\n")); return }
       const gmail = new GmailClient()
@@ -4058,6 +4480,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gmail-labels": {
       console.log()
       const gmail = new GmailClient()
@@ -4070,6 +4493,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gmail-read-all": {
       const gmail = new GmailClient()
       const result = await gmail.getUnreadCount()
@@ -4077,6 +4501,10 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log(dim(`  Found ${result} unread\n`))
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  CHARTS
+    // ═══════════════════════════════════════════════════
     case "/chart-bar": {
       if (!arg) { console.log(dim("\n  Usage: /chart-bar <title> | <label1:val1,label2:val2,...>\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4089,6 +4517,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
       return
     }
+
     case "/chart-line": {
       if (!arg) { console.log(dim("\n  Usage: /chart-line <title> | <label1:val1,label2:val2,...>\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4101,6 +4530,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
       return
     }
+
     case "/chart-pie": {
       if (!arg) { console.log(dim("\n  Usage: /chart-pie <title> | <label1:val1,label2:val2,...>\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4113,6 +4543,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
       return
     }
+
     case "/chart-doughnut": {
       if (!arg) { console.log(dim("\n  Usage: /chart-doughnut <title> | <label1:val1,...>\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4125,6 +4556,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
       return
     }
+
     case "/chart-radar": {
       if (!arg) { console.log(dim("\n  Usage: /chart-radar <title> | <label1:val1,...>\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4137,6 +4569,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
       return
     }
+
     case "/chart-scatter": {
       if (!arg) { console.log(dim("\n  Usage: /chart-scatter <title> | <x1,y1,x2,y2,...>\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4149,6 +4582,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       if (result.success) console.log(green(`  ✓ Chart: ${result.path}\n`))
       return
     }
+
     case "/chart-csv": {
       if (!arg) { console.log(dim("\n  Usage: /chart-csv <path.csv>\n")); return }
       const chart = new ChartGenerator()
@@ -4157,6 +4591,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/chart-list": {
       console.log()
       const chart = new ChartGenerator()
@@ -4169,12 +4604,17 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  YANDEX MAPS
+    // ═══════════════════════════════════════════════════
     case "/ymaps-key": {
       if (!arg) { console.log(dim("\n  Usage: /ymaps-key <api_key>\n")); return }
       state.config.yandexMapsKey = arg.trim()
       console.log(green("  ✓ API key set\n"))
       return
     }
+
     case "/ymaps-geo": {
       if (!arg) { console.log(dim("\n  Usage: /ymaps-geo <address>\n")); return }
       console.log()
@@ -4196,6 +4636,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/ymaps-show": {
       if (!arg) { console.log(dim("\n  Usage: /ymaps-show <address>\n")); return }
       console.log()
@@ -4209,6 +4650,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/ymaps-route": {
       if (!arg) { console.log(dim("\n  Usage: /ymaps-route <from> | <to>\n")); return }
       const [from, to] = arg.split("|").map(s => s.trim())
@@ -4224,6 +4666,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/ymaps-places": {
       if (!arg) { console.log(dim("\n  Usage: /ymaps-places <addr1> | <addr2> | ...\n")); return }
       const places = arg.split("|").map(s => s.trim()).filter(Boolean)
@@ -4238,6 +4681,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/ymaps-static": {
       if (!arg) { console.log(dim("\n  Usage: /ymaps-static <address>\n")); return }
       console.log()
@@ -4255,48 +4699,62 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  GAMES
+    // ═══════════════════════════════════════════════════
     case "/snake": {
       const game = new GameEngine()
       const result = await game.playSnake()
       if (result.success) console.log(green(`  ✓ Snake: ${result.path}\n`))
       return
     }
+
     case "/tetris": {
       const game = new GameEngine()
       const result = await game.playTetris()
       if (result.success) console.log(green(`  ✓ Tetris: ${result.path}\n`))
       return
     }
+
     case "/minesweeper": {
       const game = new GameEngine()
       const result = await game.playMinesweeper()
       if (result.success) console.log(green(`  ✓ Minesweeper: ${result.path}\n`))
       return
     }
+
     case "/2048": {
       const game = new GameEngine()
       const result = await game.play2048()
       if (result.success) console.log(green(`  ✓ 2048: ${result.path}\n`))
       return
     }
+
     case "/flappy": {
       const game = new GameEngine()
       const result = await game.playFlappyBird()
       if (result.success) console.log(green(`  ✓ Flappy Bird: ${result.path}\n`))
       return
     }
+
     case "/tictactoe": {
       const game = new GameEngine()
       const result = await game.playTicTacToe()
       if (result.success) console.log(green(`  ✓ Tic Tac Toe: ${result.path}\n`))
       return
     }
+
     case "/sudoku": {
       const game = new GameEngine()
       const result = await game.playSudoku()
       if (result.success) console.log(green(`  ✓ Sudoku: ${result.path}\n`))
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  GOOGLE DRIVE BACKUP
+    // ═══════════════════════════════════════════════════
     case "/gdrive-setup": {
       console.log()
       const gdrive = new GDriveBackup()
@@ -4305,7 +4763,7 @@ If everything looks normal, set severity to "none" and issues to [].`
         console.log(box([
           yellow("Требуется credentials.json"),
           "",
-          dim("1. https:
+          dim("1. https://console.cloud.google.com"),
           dim("2. Включи Google Drive API"),
           dim("3. Скачай credentials.json (OAuth 2.0)"),
           dim("4. Сохрани в ~/.stella/gdrive/credentials.json"),
@@ -4321,6 +4779,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gdrive-auth": {
       if (!arg) { console.log(dim("\n  Usage: /gdrive-auth <code>\n")); return }
       const gdrive = new GDriveBackup()
@@ -4329,6 +4788,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/gdrive-backup": {
       if (!arg) { console.log(dim("\n  Usage: /gdrive-backup <path> [name]\n")); return }
       const parts = arg.split("|").map(s => s.trim())
@@ -4347,6 +4807,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       }
       return
     }
+
     case "/gdrive-list": {
       console.log()
       const gdrive = new GDriveBackup()
@@ -4363,6 +4824,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gdrive-quota": {
       console.log()
       const gdrive = new GDriveBackup()
@@ -4378,6 +4840,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gdrive-search": {
       if (!arg) { console.log(dim("\n  Usage: /gdrive-search <query>\n")); return }
       console.log()
@@ -4393,6 +4856,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/gdrive-history": {
       console.log()
       const gdrive = new GDriveBackup()
@@ -4407,6 +4871,10 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  ADB (ANDROID DEBUG BRIDGE)
+    // ═══════════════════════════════════════════════════
     case "/adb-devices": {
       console.log()
       const adb = new ADB()
@@ -4420,6 +4888,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/adb-info": {
       console.log()
       const adb = new ADB()
@@ -4440,6 +4909,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/adb-screenshot": {
       const adb = new ADB()
       if (!adb.isAvailable()) { console.log(yellow("  ⚠ ADB not found\n")); return }
@@ -4452,6 +4922,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/adb-shell": {
       if (!arg) { console.log(dim("\n  Usage: /adb-shell <command>\n")); return }
       const adb = new ADB()
@@ -4463,6 +4934,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/adb-tap": {
       if (!arg) { console.log(dim("\n  Usage: /adb-tap <x> <y>\n")); return }
       const [x, y] = arg.split(" ").map(parseFloat)
@@ -4476,6 +4948,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/adb-swipe": {
       if (!arg) { console.log(dim("\n  Usage: /adb-swipe <x1> <y1> <x2> <y2>\n")); return }
       const [x1, y1, x2, y2] = arg.split(" ").map(parseFloat)
@@ -4488,6 +4961,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/adb-type": {
       if (!arg) { console.log(dim("\n  Usage: /adb-type <text>\n")); return }
       const adb = new ADB()
@@ -4498,6 +4972,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/adb-battery": {
       console.log()
       const adb = new ADB()
@@ -4515,6 +4990,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/adb-install": {
       if (!arg) { console.log(dim("\n  Usage: /adb-install <path.apk>\n")); return }
       if (!fs.existsSync(arg.trim())) { console.log(red(`  ✗ File not found: ${arg.trim()}\n`)); return }
@@ -4528,6 +5004,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/adb-packages": {
       console.log()
       const adb = new ADB()
@@ -4544,6 +5021,10 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
+    // ═══════════════════════════════════════════════════
+    //  HOME ASSISTANT
+    // ═══════════════════════════════════════════════════
     case "/ha-setup": {
       if (!arg) { console.log(dim("\n  Usage: /ha-setup <url> | <token>\n")); return }
       const [url, token] = arg.split("|").map(s => s.trim())
@@ -4560,6 +5041,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       }
       return
     }
+
     case "/ha-status": {
       console.log()
       const ha = new HomeAssistant()
@@ -4579,6 +5061,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/ha-states": {
       console.log()
       const ha = new HomeAssistant()
@@ -4594,6 +5077,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/ha-lights": {
       console.log()
       const ha = new HomeAssistant()
@@ -4609,6 +5093,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/ha-sensors": {
       console.log()
       const ha = new HomeAssistant()
@@ -4624,6 +5109,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/ha-toggle": {
       if (!arg) { console.log(dim("\n  Usage: /ha-toggle <entity_id>\n")); return }
       const ha = new HomeAssistant()
@@ -4633,6 +5119,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/ha-on": {
       if (!arg) { console.log(dim("\n  Usage: /ha-on <entity_id>\n")); return }
       const ha = new HomeAssistant()
@@ -4642,6 +5129,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/ha-off": {
       if (!arg) { console.log(dim("\n  Usage: /ha-off <entity_id>\n")); return }
       const ha = new HomeAssistant()
@@ -4651,6 +5139,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/ha-climate": {
       console.log()
       const ha = new HomeAssistant()
@@ -4666,6 +5155,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/ha-media": {
       console.log()
       const ha = new HomeAssistant()
@@ -4681,6 +5171,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       console.log()
       return
     }
+
     case "/ha-volume": {
       if (!arg) { console.log(dim("\n  Usage: /ha-volume <entity_id> | <level 0-100>\n")); return }
       const [entity, levelStr] = arg.split("|").map(s => s.trim())
@@ -4693,6 +5184,7 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     case "/ha-cover": {
       if (!arg) { console.log(dim("\n  Usage: /ha-cover <entity_id> | <open|close|stop|position>\n")); return }
       const [entityId, action] = arg.split("|").map(s => s.trim())
@@ -4715,10 +5207,12 @@ If everything looks normal, set severity to "none" and issues to [].`
       else console.log(red(`  ✗ ${result.error}\n`))
       return
     }
+
     default:
       console.log(dim(`\n  Неизвестная команда: ${cmd}. Смотри /help\n`))
   }
 }
+
 function safeExec(cmd) {
   try {
     return execSync(cmd, { encoding: "utf8" }).trim()
@@ -4726,6 +5220,8 @@ function safeExec(cmd) {
     return "не найден"
   }
 }
+
+// ---------- /plan: Autonomous multi-step execution ----------
 async function runPlan(taskDescription) {
   console.log()
   console.log(box([
@@ -4736,10 +5232,14 @@ async function runPlan(taskDescription) {
     dim("ИИ составит план, вы подтвердите, затем автономное выполнение."),
   ], { color: purple, padding: 2 }))
   console.log()
+
   startSpinner("Составляю план")
   const planPrompt = `Составь пошаговый план для следующей задачи. Верни ТОЛЬКО JSON массив объектов { "id": N, "action": "описание действия", "files": ["список файлов"] } без markdown и пояснений.
+
 Задача: ${taskDescription}
+
 Рабочая директория: ${process.cwd()}`
+
   let plan
   try {
     const { text } = await generateText({
@@ -4755,43 +5255,56 @@ async function runPlan(taskDescription) {
     console.log(red("  ✗ Ошибка генерации плана: ") + String(e?.message || e).slice(0, 200) + "\n")
     return
   }
+
   console.log(box([
     ...plan.map((s, i) => violet(`[${i + 1}]`) + " " + white(s.action)),
     "",
     dim("Подтвердите выполнение плана"),
   ], { title: "План", color: purple, padding: 2 }))
+
   const confirm = await question("\n  " + violet("Выполнить план? (y/n) › "))
   if (confirm.trim().toLowerCase() !== "y" && confirm.trim().toLowerCase() !== "д") {
     console.log(dim("  Отмена\n"))
     return
   }
+
   for (let i = 0; i < plan.length; i++) {
     const step = plan[i]
     console.log()
     console.log(purple(`  ▶ Шаг ${i + 1}/${plan.length}: `) + bold(white(step.action)))
+
     await runTurn(step.action)
+
     console.log(dim(`  ✓ Шаг ${i + 1} выполнен`))
   }
+
   console.log()
   console.log(green("  ✓ Все шаги плана выполнены!\n"))
 }
+
+// ---------- /commit: AI-generated git commits ----------
 async function runCommit(customMessage) {
   console.log()
   const status = safeExec("git status --porcelain")
   if (!status) { console.log(dim("  Нет изменений для коммита\n")); return }
+
   const diff = safeExec("git diff --stat")
   console.log(box([
     dim("Изменения:"),
     dim(diff || status),
   ], { title: "Git Status", color: purple, padding: 2 }))
+
   let commitMessage = customMessage
   if (!commitMessage) {
     startSpinner("Генерирую сообщение коммита")
     const commitPrompt = `Проанализируй эти изменения в git и создай краткое сообщение коммита (50-72 символа). Верни ТОЛЬКО текст сообщения без кавычек и markdown.
+
 Изменения:
 ${status}
+
 Diff:
 ${diff}`
+
     try {
       const { text } = await generateText({
         model: getModel(state.model),
@@ -4805,6 +5318,7 @@ ${diff}`
       return
     }
   }
+
   console.log()
   console.log(dim("  Сообщение: ") + white(commitMessage))
   const confirm = await question("\n  " + violet("Сделать коммит? (y/n) › "))
@@ -4812,15 +5326,20 @@ ${diff}`
     console.log(dim("  Отмена\n"))
     return
   }
+
   const addResult = safeExec("git add -A")
   const commitResult = safeExec(`git commit -m "${commitMessage}"`)
   console.log(green("  ✓ ") + dim(commitResult.split("\n")[0]))
   console.log()
 }
-const OLLAMA_BASE = "http:
+
+// ---------- /ollama: Local LLM integration ----------
+const OLLAMA_BASE = "http://localhost:11434"
 let ollamaModels = []
+
 async function handleOllama(arg) {
   console.log()
+
   if (arg === "list" || arg === "ls" || arg === "список") {
     startSpinner("Подключаюсь к Ollama")
     try {
@@ -4845,17 +5364,21 @@ async function handleOllama(arg) {
     }
     return
   }
+
   if (arg === "run" || arg === "запуск") {
     const numArg = await question("  " + violet("Номер модели › "))
     const idx = Number.parseInt(numArg) - 1
     if (!ollamaModels[idx]) { console.log(dim("  Неверный номер\n")); return }
+
     const modelName = ollamaModels[idx].name
     console.log(green(`  ✓ Модель: ${modelName} (Ollama local)`))
     console.log(dim("  Теперь все запросы будут идти через локальную модель"))
     console.log(dim("  Для возврата к облачной: /model\n"))
+
     state.model = `ollama:${modelName}`
     return
   }
+
   console.log(box([
     violet("/ollama list") + dim(" — список локальных моделей"),
     violet("/ollama run") + dim(" — выбрать модель для работы"),
@@ -4865,52 +5388,64 @@ async function handleOllama(arg) {
   ], { title: "Локальные LLM (Ollama)", color: purple, padding: 2 }))
   console.log()
 }
+
+// ---------- /vt: VirusTotal integration ----------
 async function handleVirusTotal(arg) {
   console.log()
   if (!arg) {
     console.log(dim("  Использование: /vt <путь к файлу>\n"))
     return
   }
+
   const filePath = arg.trim()
   if (!fs.existsSync(filePath)) {
     console.log(red(`  ✗ Файл не найден: ${filePath}\n`))
     return
   }
+
   startSpinner("Вычисляю хеш файла")
   const fileContent = fs.readFileSync(filePath)
   const hash = crypto.createHash("sha256").update(fileContent).digest("hex")
+
   console.log(dim("  SHA-256: ") + gray(hash))
+
   startSpinner("Запрашиваю VirusTotal")
   try {
     const vtKey = process.env.VIRUSTOTAL_API_KEY || ""
     if (!vtKey) {
       stopSpinner()
       console.log(yellow("  ⚠ VIRUSTOTAL_API_KEY не задан"))
-      console.log(dim("  Получите ключ: ") + cyan("https:
+      console.log(dim("  Получите ключ: ") + cyan("https://www.virustotal.com/gui/my-apikey"))
       console.log(dim("  Задайте: ") + violet("export VIRUSTOTAL_API_KEY=ваш_ключ\n"))
       return
     }
-    const res = await fetch(`https:
+
+    const res = await fetch(`https://www.virustotal.com/api/v3/files/${hash}`, {
       headers: { "x-apikey": vtKey },
       signal: AbortSignal.timeout(10000),
     })
     stopSpinner()
+
     if (res.status === 404) {
       console.log(yellow("  ⚠ Файл не найден в базе VirusTotal"))
-      console.log(dim("  Загрузите файл на: ") + cyan("https:
+      console.log(dim("  Загрузите файл на: ") + cyan("https://www.virustotal.com/gui/upload\n"))
       return
     }
+
     if (!res.ok) {
       console.log(red(`  ✗ Ошибка API: HTTP ${res.status}\n`))
       return
     }
+
     const data = await res.json()
     const stats = data.data?.attributes?.last_analysis_stats || {}
     const malicious = stats.malicious || 0
     const suspicious = stats.suspicious || 0
     const harmless = stats.harmless || 0
     const total = malicious + suspicious + harmless
+
     const severity = malicious > 0 ? "danger" : suspicious > 0 ? "warning" : "safe"
+
     console.log(box([
       dim("Файл:     ") + white(path.basename(filePath)),
       dim("Хеш:      ") + gray(hash.slice(0, 16) + "..."),
@@ -4927,24 +5462,31 @@ async function handleVirusTotal(arg) {
     console.log(red("  ✗ Ошибка: ") + String(e?.message || e).slice(0, 200) + "\n")
   }
 }
+
+// ---------- /ai-scan: AI-powered code analysis ----------
 async function handleAIScan(arg) {
   console.log()
   if (!arg) {
     console.log(dim("  Использование: /ai-scan <путь к файлу>\n"))
     return
   }
+
   const filePath = arg.trim()
   if (!fs.existsSync(filePath)) {
     console.log(red(`  ✗ Файл не найден: ${filePath}\n`))
     return
   }
+
   const content = fs.readFileSync(filePath, "utf8")
   if (content.length > 50000) {
     console.log(red("  ✗ Файл слишком большой для AI-анализа (>50KB)\n"))
     return
   }
+
   startSpinner("AI анализирует код")
+
   const analysisPrompt = `Ты — эксперт по информационной безопасности. Проанализируй этот файл на наличие:
+
 1. Backdoors / бэкдоров
 2. Обфусцированного кода
 3. Утечки данных
@@ -4952,12 +5494,15 @@ async function handleAIScan(arg) {
 5. Скрытых сетевых соединений
 6. Кейлоггеров
 7. Руткитов
+
 Файл: ${path.basename(filePath)}
 Размер: ${content.length} символов
+
 Содержимое:
 \`\`\`
 ${content.slice(0, 15000)}
 \`\`\`
+
 Ответь в формате JSON:
 {
   "verdict": "safe|suspicious|malicious",
@@ -4965,12 +5510,14 @@ ${content.slice(0, 15000)}
   "threats": [{"type": "...", "severity": "low|medium|high|critical", "description": "..."}],
   "summary": "краткое резюме на русском"
 }`
+
   try {
     const { text } = await generateText({
       model: getModel(state.model),
       messages: [{ role: "user", content: analysisPrompt }],
     })
     stopSpinner()
+
     let result
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -4978,15 +5525,18 @@ ${content.slice(0, 15000)}
     } catch {
       result = { verdict: "unknown", summary: text }
     }
+
     const verdictColors = { safe: [0, 200, 100], suspicious: [255, 200, 0], malicious: [255, 80, 80], unknown: [150, 150, 150] }
     const verdictLabels = { safe: "БЕЗОПАСЕН", suspicious: "ПОДОЗРИТЕЛЕН", malicious: "ОПАСЕН", unknown: "НЕОПРЕДЕЛЁН" }
     const vc = verdictColors[result.verdict] || verdictColors.unknown
+
     const lines = [
       dim("Файл:    ") + white(path.basename(filePath)),
       dim("Вердикт: ") + `\x1b[38;2;${vc[0]};${vc[1]};${vc[2]}m${bold(verdictLabels[result.verdict] || result.verdict)}\x1b[0m`,
       dim("Уверенность: ") + white(`${result.confidence || "?"}%`),
       "",
     ]
+
     if (result.threats && result.threats.length > 0) {
       lines.push(red("Угрозы:"))
       for (const t of result.threats) {
@@ -4996,10 +5546,12 @@ ${content.slice(0, 15000)}
     } else {
       lines.push(green("  Угроз не обнаружено"))
     }
+
     if (result.summary) {
       lines.push("")
       lines.push(dim("Резюме: ") + white(result.summary))
     }
+
     console.log(box(lines, { title: "AI Security Analysis", color: vc, padding: 2 }))
     console.log()
   } catch (e) {
@@ -5007,6 +5559,9 @@ ${content.slice(0, 15000)}
     console.log(red("  ✗ Ошибка: ") + String(e?.message || e).slice(0, 200) + "\n")
   }
 }
+
+// ---------- /ollama: Local LLM integration ----------
+
 function goodbye() {
   console.log()
   console.log(gradientLine("  ✦ До встречи! Stella Coder завершает работу."))
@@ -5014,11 +5569,15 @@ function goodbye() {
   console.log()
   process.exit(0)
 }
+
+// ---------- REPL ----------
 async function welcomeAndSetup() {
   console.clear()
   console.log()
   console.log(gradientLine("  ✦ Добро пожаловать в Stella!"))
   console.log()
+
+  // Step 1: Try Ollama (free, no API key needed)
   let ollamaAvailable = false
   try {
     const res = await fetch(`${OLLAMA_BASE}/api/tags`, { signal: AbortSignal.timeout(2000) })
@@ -5028,6 +5587,7 @@ async function welcomeAndSetup() {
       ollamaAvailable = ollamaModels.length > 0
     }
   } catch {}
+
   if (ollamaAvailable) {
     console.log(box([
       green("✓ Ollama найден!") + dim(` (${ollamaModels.length} моделей)`),
@@ -5040,6 +5600,7 @@ async function welcomeAndSetup() {
       ollamaModels.length > 5 ? dim(`  ... и ещё ${ollamaModels.length - 5}`) : "",
     ], { title: "✦ Бесплатные модели (Ollama)", color: [0, 200, 100], padding: 2 }))
     console.log()
+
     const useOllama = await question("  " + green("Использовать Ollama? (Y/n) › "))
     if (!useOllama || useOllama.toLowerCase() !== "n") {
       if (ollamaModels.length === 1) {
@@ -5059,6 +5620,8 @@ async function welcomeAndSetup() {
       return "ollama"
     }
   }
+
+  // Step 2: No Ollama — offer API key or install Ollama
   console.log(box([
     white("Stella работает с двумя типами моделей:"),
     "",
@@ -5066,17 +5629,20 @@ async function welcomeAndSetup() {
     violet("2. Stella AI (облачные модели)") + dim(" — нужен API ключ"),
     "",
     ollamaAvailable ? "" : yellow("⚠ Ollama не найден."),
-    ollamaAvailable ? "" : dim("Установите: ") + white("https:
+    ollamaAvailable ? "" : dim("Установите: ") + white("https://ollama.com/download"),
   ], { title: "✦ Выберите способ", color: violet, padding: 2 }))
   console.log()
+
   if (!ollamaAvailable) {
     console.log(dim("  Для бесплатного использования установите Ollama:"))
-    console.log(dim("  1. Скачайте: ") + cyan("https:
+    console.log(dim("  1. Скачайте: ") + cyan("https://ollama.com/download"))
     console.log(dim("  2. Установите модель: ") + white("ollama pull llama3.2"))
     console.log(dim("  3. Запустите: ") + white("ollama serve"))
     console.log()
+
     const installOllama = await question("  " + violet("Установлено? (y/N) › "))
     if (installOllama && installOllama.toLowerCase() === "y") {
+      // Try again to detect Ollama
       try {
         const res = await fetch(`${OLLAMA_BASE}/api/tags`, { signal: AbortSignal.timeout(2000) })
         if (res.ok) {
@@ -5102,30 +5668,36 @@ async function welcomeAndSetup() {
       console.log(yellow("  Ollama всё ещё не обнаружен. Проверьте что ollama serve запущен.\n"))
     }
   }
+
+  // Step 3: API key for cloud models
   console.log(box([
     violet("Для облачных моделей нужен API ключ:"),
     "",
     white("1. Перейдите на сайт:"),
-    cyan("   https:
+    cyan("   https://opencode.ai/workspace/wrk_01KWPREB55NNG22C1D2MFPT84B"),
     "",
     white("2. Скопируйте ваш API ключ"),
     white("3. Отправьте его мне"),
   ], { title: "✦ Stella AI API ключ", color: violet, padding: 2 }))
   console.log()
+
   let attempts = 0
   while (attempts < 5) {
     const key = await question("  " + violet("Введите API ключ › "))
     const trimmed = key.trim()
+
     if (!trimmed) {
       console.log(red("  Ключ не может быть пустым\n"))
       attempts++
       continue
     }
+
     if (trimmed.length < 10) {
       console.log(red("  Ключ слишком короткий. Попробуйте ещё раз.\n"))
       attempts++
       continue
     }
+
     const result = saveApiKey(trimmed)
     if (result.ok) {
       const hw = getHardwareInfo()
@@ -5139,15 +5711,21 @@ async function welcomeAndSetup() {
       attempts++
     }
   }
+
   console.log(red("  Превышено количество попыток. Выход.\n"))
   process.exit(1)
 }
+
 async function main() {
+  // Code integrity check
   const integrity = verifyCodeIntegrity()
   if (integrity.warning) {
     console.log(yellow("  ⚠ " + integrity.warning))
   }
+
   if (printMode) {
+    // In print mode, try to use piped input as prompt
+    // API key should already be loaded from secure vault
     const prompt = printPrompt || (await readStdin())
     if (!prompt) {
       if (!apiKey && !state.model.startsWith("ollama:")) {
@@ -5164,6 +5742,8 @@ async function main() {
     await runTurn(prompt)
     process.exit(0)
   }
+
+  // Create readline interface FIRST (needed for welcomeAndSetup question prompts)
   rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -5173,14 +5753,18 @@ async function main() {
       return [hits, line]
     },
   })
+
+  // Check for API key — show welcome if not found
   if (!apiKey && !state.model.startsWith("ollama:")) {
     apiKey = await welcomeAndSetup()
     if (!state.model.startsWith("ollama:")) {
       state.model = MODELS[0].id
     }
   }
+
   console.clear()
   printBanner({ model: state.model, cwd: process.cwd(), version: VERSION })
+
   let lastSigint = 0
   rl.on("SIGINT", () => {
     const now = Date.now()
@@ -5190,6 +5774,7 @@ async function main() {
     promptUser()
   })
   rl.on("close", goodbye)
+
   const promptUser = () => {
     rl.question(gradientLine("❯ "), async (line) => {
       const input = line.trim()
@@ -5212,6 +5797,7 @@ async function main() {
   }
   promptUser()
 }
+
 function readStdin() {
   return new Promise((res) => {
     if (process.stdin.isTTY) return res("")
@@ -5220,4 +5806,5 @@ function readStdin() {
     process.stdin.on("end", () => res(data.trim()))
   })
 }
+
 main()

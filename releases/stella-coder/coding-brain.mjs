@@ -2,10 +2,20 @@ import fs from "node:fs"
 import path from "node:path"
 import { execSync } from "node:child_process"
 import { generateText } from "ai"
-const MAX_CONTEXT_CHARS = 800_000 
-const COMPRESS_THRESHOLD = 600_000 
-const MAX_FILE_READ = 50_000 
-const MAX_FILES_IN_CONTEXT = 50 
+
+// ═══════════════════════════════════════════════════════════════════
+// STELLA CODING BRAIN — Огромный контекст + TDD + Git экосистема
+// ═══════════════════════════════════════════════════════════════════
+
+const MAX_CONTEXT_CHARS = 800_000 // ~200K токенов контекст
+const COMPRESS_THRESHOLD = 600_000 // сжимать при превышении
+const MAX_FILE_READ = 50_000 // макс. размер файла для чтения в контекст
+const MAX_FILES_IN_CONTEXT = 50 // макс. файлов в контексте
+
+// ═══════════════════════════════════════════════════════════════════
+// 1. REPO MAPPER — карта всего репозитория
+// ═══════════════════════════════════════════════════════════════════
+
 export function buildRepoMap(cwd) {
   const ignoreDirs = new Set([
     "node_modules", ".git", "dist", "build", ".next", ".cache",
@@ -17,10 +27,12 @@ export function buildRepoMap(cwd) {
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
     ".woff", ".woff2", ".ttf", ".eot",
   ])
+
   const tree = []
   const fileTypes = {}
   let totalSize = 0
   let fileCount = 0
+
   function scan(dir, prefix = "") {
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -29,11 +41,14 @@ export function buildRepoMap(cwd) {
         if (!a.isDirectory() && b.isDirectory()) return 1
         return a.name.localeCompare(b.name)
       })
+
       for (const entry of entries) {
         if (ignoreDirs.has(entry.name)) continue
         if (entry.name.startsWith(".") && entry.name !== ".env.example" && entry.name !== ".gitignore") continue
+
         const fullPath = path.join(dir, entry.name)
         const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
+
         if (entry.isDirectory()) {
           const childCount = countFilesSafe(fullPath, ignoreDirs)
           tree.push(`${prefix}📁 ${entry.name}/ (${childCount} files)`)
@@ -51,15 +66,18 @@ export function buildRepoMap(cwd) {
       }
     } catch {}
   }
+
   scan(cwd)
+
   return {
-    tree: tree.slice(0, 500), 
+    tree: tree.slice(0, 500), // лимит строк
     fileTypes,
     totalSize: formatSize(totalSize),
     fileCount,
     summary: `${fileCount} файлов, ${formatSize(totalSize)}`,
   }
 }
+
 function countFilesSafe(dir, ignoreDirs) {
   let count = 0
   try {
@@ -72,15 +90,25 @@ function countFilesSafe(dir, ignoreDirs) {
   } catch {}
   return count
 }
+
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes}B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 2. CONTEXT BUILDER — сборка огромного контекста
+// ═══════════════════════════════════════════════════════════════════
+
 export function buildProjectContext(cwd) {
   const context = { parts: [], totalChars: 0 }
+
+  // 1. Repo map
   const map = buildRepoMap(cwd)
   addPart(context, `# Карта репозитория\n\n${map.summary}\n\n\`\`\`\n${map.tree.join("\n")}\n\`\`\``)
+
+  // 2. Package files
   for (const pkgFile of ["package.json", "tsconfig.json", "Cargo.toml", "pyproject.toml", "go.mod", "composer.json"]) {
     const p = path.join(cwd, pkgFile)
     if (fs.existsSync(p)) {
@@ -88,6 +116,8 @@ export function buildProjectContext(cwd) {
       if (content) addPart(context, `# ${pkgFile}\n\n\`\`\`json\n${content}\n\`\`\``)
     }
   }
+
+  // 3. Config files
   for (const cfgFile of [".env.example", ".gitignore", "eslint.config.mjs", "prettier.config.js", "biome.json"]) {
     const p = path.join(cwd, cfgFile)
     if (fs.existsSync(p)) {
@@ -95,6 +125,8 @@ export function buildProjectContext(cwd) {
       if (content) addPart(context, `# ${cfgFile}\n\n${content}`)
     }
   }
+
+  // 4. SPEC.md / CLAUDE.md / STELLA.md
   for (const specFile of ["SPEC.md", "CLAUDE.md", "STELLA.md", "README.md", "AGENTS.md"]) {
     const p = path.join(cwd, specFile)
     if (fs.existsSync(p)) {
@@ -102,6 +134,8 @@ export function buildProjectContext(cwd) {
       if (content) addPart(context, `# ${specFile}\n\n${content}`)
     }
   }
+
+  // 5. Key source files (auto-detect important ones)
   const importantFiles = detectImportantFiles(cwd)
   for (const f of importantFiles) {
     const content = readFileSafe(f.fullPath, MAX_FILE_READ)
@@ -109,23 +143,28 @@ export function buildProjectContext(cwd) {
       addPart(context, `# ${f.relPath}\n\n\`\`\`${f.lang}\n${content}\n\`\`\``)
     }
   }
+
   return context
 }
+
 function addPart(ctx, text) {
   if (ctx.totalChars + text.length > MAX_CONTEXT_CHARS) return false
   ctx.parts.push(text)
   ctx.totalChars += text.length
   return true
 }
+
 function readFileSafe(filePath, maxChars) {
   try {
     const content = fs.readFileSync(filePath, "utf8")
     return content.length > maxChars ? content.slice(0, maxChars) + "\n... [truncated]" : content
   } catch { return null }
 }
+
 function detectImportantFiles(cwd) {
   const candidates = []
   const extensions = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".py", ".rs", ".go", ".java", ".cs", ".rb"])
+
   function scan(dir, rel = "") {
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -133,23 +172,27 @@ function detectImportantFiles(cwd) {
         if (["node_modules", ".git", "dist", "build", ".next"].includes(e.name)) continue
         const fullPath = path.join(dir, e.name)
         const relPath = rel ? `${rel}/${e.name}` : e.name
+
         if (e.isDirectory()) {
           scan(fullPath, relPath)
         } else {
           const ext = path.extname(e.name).toLowerCase()
           if (!extensions.has(ext)) continue
+
           try {
             const stat = fs.statSync(fullPath)
             const isIndex = /index\.(ts|tsx|js|jsx|mjs)$/.test(e.name)
             const isMain = /^(main|app|server|cli|index)\./.test(e.name)
             const isConfig = /config|settings|constants/.test(e.name.toLowerCase())
             const depth = relPath.split("/").length
+
             let priority = 0
             if (isMain) priority += 100
             if (isIndex) priority += 80
             if (isConfig) priority += 60
             if (depth <= 2) priority += 40
             if (stat.size > 1000 && stat.size < 50000) priority += 20
+
             candidates.push({
               fullPath,
               relPath,
@@ -162,24 +205,36 @@ function detectImportantFiles(cwd) {
       }
     } catch {}
   }
+
   scan(cwd)
+
   return candidates
     .sort((a, b) => b.priority - a.priority)
     .slice(0, MAX_FILES_IN_CONTEXT)
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 3. CONTEXT COMPRESSOR — сжатие контекста
+// ═══════════════════════════════════════════════════════════════════
+
 export async function compressContext(messages, model) {
   if (JSON.stringify(messages).length < COMPRESS_THRESHOLD) return messages
+
   const summaryPrompt = `Ты — эксперт по сжатию контекста. Сожми этот диалог в краткое резюме.
+
 Включи:
 1. Цели и задачи пользователя
 2. Сделанные изменения (какие файлы, что изменено)
 3. Текущий статус (что работает, что нет)
 4. Важные решения и их обоснование
 5. Следующие шаги
+
 Пиши кратко, по-русски, используя markdown.
 Максимум 3000 символов.
+
 Диалог:
 ${messages.map(m => `${m.role}: ${typeof m.content === "string" ? m.content : JSON.stringify(m.content).slice(0, 2000)}`).join("\n\n")}`
+
   try {
     const { text } = await generateText({ model, messages: [{ role: "user", content: summaryPrompt }] })
     return [
@@ -187,9 +242,15 @@ ${messages.map(m => `${m.role}: ${typeof m.content === "string" ? m.content : JS
       { role: "assistant", content: "Понял. Контекст сжат, продолжаем работу с этим резюме." },
     ]
   } catch {
+    // если сжатие не удалось — просто обрезаем старые сообщения
     return messages.slice(-20)
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 4. SPEC ENGINE — автономная работа по SPEC.md / CLAUDE.md
+// ═══════════════════════════════════════════════════════════════════
+
 export function loadSpec(cwd) {
   for (const specFile of ["SPEC.md", "CLAUDE.md", "AGENTS.md", "STELLA.md"]) {
     const p = path.join(cwd, specFile)
@@ -200,27 +261,35 @@ export function loadSpec(cwd) {
   }
   return { file: null, content: null, exists: false }
 }
+
 export function generateSpecTemplate(projectName, description) {
   return `# SPEC: ${projectName}
+
 ## Описание
 ${description || "Опишите назначение проекта"}
+
 ## Архитектура
 - Опишите ключевые компоненты
 - Укажите зависимости между модулями
+
 ## API / Интерфейсы
 - Опишите публичные интерфейсы
+
 ## Требования
 ### Функциональные
 - [ ] Требование 1
 - [ ] Требование 2
+
 ### Нефункциональные
 - [ ] Производительность
 - [ ] Безопасность
 - [ ] Тестируемость
+
 ## Тесты
 - Unit-тесты для каждого модуля
 - Интеграционные тесты для API
 - E2E тесты для критических путей
+
 ## Структура файлов
 \`\`\`
 src/
@@ -231,13 +300,20 @@ src/
 \`\`\`
 `
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 5. TDD ENGINE — автономный тест-драйв
+// ═══════════════════════════════════════════════════════════════════
+
 export function detectTestFramework(cwd) {
+  // Check for common test frameworks
   const checks = [
     { file: "package.json", pattern: /"vitest"|"jest"|"mocha"|"ava"|"tap"/, name: "package.json" },
     { file: "pyproject.toml", pattern: /pytest|unittest/, name: "pyproject.toml" },
     { file: "Cargo.toml", pattern: /\[dev-dependencies\]/, name: "Cargo.toml" },
     { file: "go.mod", pattern: /testify|testing/, name: "go.mod" },
   ]
+
   for (const check of checks) {
     const p = path.join(cwd, check.file)
     if (fs.existsSync(p)) {
@@ -252,14 +328,18 @@ export function detectTestFramework(cwd) {
       }
     }
   }
+
+  // Check for test directories
   const testDirs = ["__tests__", "tests", "test", "spec", "src/__tests__"]
   for (const d of testDirs) {
     if (fs.existsSync(path.join(cwd, d))) {
       return { detected: true, framework: "unknown", config: d }
     }
   }
+
   return { detected: false, framework: null, config: null }
 }
+
 export function detectLinter(cwd) {
   const linters = [
     { config: ".eslintrc.js", name: "eslint", cmd: "npx eslint" },
@@ -275,13 +355,16 @@ export function detectLinter(cwd) {
     { config: ".pylintrc", name: "pylint", cmd: "pylint" },
     { config: "clippy.toml", name: "clippy", cmd: "cargo clippy" },
   ]
+
   for (const l of linters) {
     if (fs.existsSync(path.join(cwd, l.config))) {
       return { detected: true, ...l }
     }
   }
+
   return { detected: false }
 }
+
 export function detectFormatter(cwd) {
   const formatters = [
     { config: ".prettierrc", name: "prettier", cmd: "npx prettier --write" },
@@ -289,13 +372,16 @@ export function detectFormatter(cwd) {
     { config: "biome.json", name: "biome", cmd: "npx biome format --write" },
     { config: ".stylua.toml", name: "stylua", cmd: "stylua" },
   ]
+
   for (const f of formatters) {
     if (fs.existsSync(path.join(cwd, f.config))) {
       return { detected: true, ...f }
     }
   }
+
   return { detected: false }
 }
+
 export function detectTypeChecker(cwd) {
   const checkers = [
     { config: "tsconfig.json", name: "typescript", cmd: "npx tsc --noEmit" },
@@ -303,34 +389,44 @@ export function detectTypeChecker(cwd) {
     { config: ".mypy.ini", name: "mypy", cmd: "mypy" },
     { config: "pyrightconfig.json", name: "pyright", cmd: "npx pyright" },
   ]
+
   for (const c of checkers) {
     if (fs.existsSync(path.join(cwd, c.config))) {
       return { detected: true, ...c }
     }
   }
+
   return { detected: false }
 }
+
 export function generateTestPrompt(filePath, fileContent, spec) {
   const fileName = path.basename(filePath)
   const ext = path.extname(filePath).slice(1)
+
   const langMap = {
     ts: "TypeScript", tsx: "TypeScript React", js: "JavaScript",
     jsx: "JavaScript React", py: "Python", rs: "Rust", go: "Go",
     java: "Java", rb: "Ruby", cs: "C#",
   }
+
   const lang = langMap[ext] || ext
   const testExt = { ts: "test.ts", tsx: "test.tsx", js: "test.js", jsx: "test.jsx", py: "test.py" }
   const testFile = fileName.replace(new RegExp(`\\.${ext}$`), "") + (testExt[ext] || `.test.${ext}`)
+
   return {
     testFile,
     prompt: `Ты — эксперт по TDD. Напиши unit-тесты для файла ${fileName}.
+
 Файл: ${filePath}
 Язык: ${lang}
+
 Содержимое:
 \`\`\`${ext}
 ${fileContent}
 \`\`\`
+
 ${spec ? `SPEC проекта:\n${spec.slice(0, 3000)}` : ""}
+
 Сгенерируй ТОЛЬКО код тестов. Правила:
 1. Используй ${lang} и стандартные библиотеки тестирования
 2. Покрой все публичные функции/методы
@@ -340,6 +436,11 @@ ${spec ? `SPEC проекта:\n${spec.slice(0, 3000)}` : ""}
 6. Верни ТОЛЬКО код, без объяснений`,
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 6. GIT ECOSYSTEM — профессиональная работа с Git
+// ═══════════════════════════════════════════════════════════════════
+
 export function gitStatus(cwd) {
   try {
     const status = execSync("git status --porcelain", { cwd, encoding: "utf8", timeout: 10000 })
@@ -347,10 +448,12 @@ export function gitStatus(cwd) {
     const ahead = execSync("git rev-list --count @{upstream}..HEAD 2>nul || echo 0", { cwd, encoding: "utf8", timeout: 5000 }).trim()
     const behind = execSync("git rev-list --count HEAD..@{upstream} 2>nul || echo 0", { cwd, encoding: "utf8", timeout: 5000 }).trim()
     const stashCount = execSync("git stash list 2>nul | find /c /v \"\" || echo 0", { cwd, encoding: "utf8", timeout: 5000 }).trim()
+
     const files = status.split("\n").filter(l => l.trim()).map(l => ({
       status: l.slice(0, 2).trim(),
       path: l.slice(3),
     }))
+
     return {
       branch,
       ahead: parseInt(ahead) || 0,
@@ -363,23 +466,27 @@ export function gitStatus(cwd) {
     return { branch: "unknown", ahead: 0, behind: 0, stashCount: 0, files: [], clean: true, error: e.message }
   }
 }
+
 export function gitDiff(cwd, file = null) {
   try {
     const cmd = file ? `git diff "${file}"` : "git diff --stat"
     return execSync(cmd, { cwd, encoding: "utf8", timeout: 30000 }).trim()
   } catch { return "" }
 }
+
 export function gitLog(cwd, count = 10) {
   try {
     return execSync(`git log --oneline -${count}`, { cwd, encoding: "utf8", timeout: 10000 }).trim()
   } catch { return "" }
 }
+
 export function gitBranches(cwd) {
   try {
     const output = execSync("git branch -a --format=%(refname:short)", { cwd, encoding: "utf8", timeout: 10000 })
     return output.trim().split("\n").filter(b => b.trim())
   } catch { return [] }
 }
+
 export function gitCreateBranch(cwd, name, startPoint = null) {
   try {
     const cmd = startPoint ? `git checkout -b "${name}" "${startPoint}"` : `git checkout -b "${name}"`
@@ -389,6 +496,7 @@ export function gitCreateBranch(cwd, name, startPoint = null) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitCheckout(cwd, branch) {
   try {
     execSync(`git checkout "${branch}"`, { cwd, encoding: "utf8", timeout: 10000 })
@@ -397,11 +505,13 @@ export function gitCheckout(cwd, branch) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitMerge(cwd, branch) {
   try {
     execSync(`git merge "${branch}" --no-edit`, { cwd, encoding: "utf8", timeout: 30000 })
     return { success: true }
   } catch (e) {
+    // Check for merge conflicts
     try {
       const conflicts = execSync("git diff --name-only --diff-filter=U", { cwd, encoding: "utf8", timeout: 5000 })
       if (conflicts.trim()) {
@@ -416,6 +526,7 @@ export function gitMerge(cwd, branch) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitStash(cwd, message = null) {
   try {
     const cmd = message ? `git stash push -m "${message}"` : "git stash push"
@@ -425,6 +536,7 @@ export function gitStash(cwd, message = null) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitStashPop(cwd) {
   try {
     execSync("git stash pop", { cwd, encoding: "utf8", timeout: 10000 })
@@ -433,6 +545,7 @@ export function gitStashPop(cwd) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitCommit(cwd, message) {
   try {
     execSync(`git commit -m "${message}"`, { cwd, encoding: "utf8", timeout: 30000 })
@@ -441,6 +554,7 @@ export function gitCommit(cwd, message) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitPush(cwd, branch = null, force = false) {
   try {
     const cmd = force ? "git push --force-with-lease" : `git push${branch ? ` origin ${branch}` : ""}`
@@ -450,6 +564,7 @@ export function gitPush(cwd, branch = null, force = false) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitPull(cwd, rebase = false) {
   try {
     const cmd = rebase ? "git pull --rebase" : "git pull"
@@ -459,6 +574,7 @@ export function gitPull(cwd, rebase = false) {
     return { success: false, error: e.message }
   }
 }
+
 export function gitCreatePR(cwd, title, body, base = "main") {
   try {
     const cmd = `gh pr create --title "${title}" --body "${body}" --base ${base}`
@@ -468,16 +584,19 @@ export function gitCreatePR(cwd, title, body, base = "main") {
     return { success: false, error: e.message }
   }
 }
+
 export function gitListPRs(cwd) {
   try {
     const output = execSync("gh pr list --json number,title,author,state,url", { cwd, encoding: "utf8", timeout: 30000 })
     return JSON.parse(output)
   } catch { return [] }
 }
+
 export function gitResolveConflicts(cwd, strategy = "theirs") {
   try {
     const files = execSync("git diff --name-only --diff-filter=U", { cwd, encoding: "utf8", timeout: 5000 })
     if (!files.trim()) return { success: true, message: "No conflicts" }
+
     for (const file of files.trim().split("\n")) {
       execSync(`git checkout --${strategy} "${file}"`, { cwd, encoding: "utf8", timeout: 10000 })
     }
@@ -487,8 +606,14 @@ export function gitResolveConflicts(cwd, strategy = "theirs") {
     return { success: false, error: e.message }
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 7. AUTO-FIX ENGINE — автоматическое исправление
+// ═══════════════════════════════════════════════════════════════════
+
 export function runLinter(cwd, linter) {
   if (!linter.detected) return { success: false, error: "Linter not detected" }
+
   try {
     const output = execSync(`${linter.cmd} . 2>&1`, { cwd, encoding: "utf8", timeout: 60000 })
     return { success: true, output, hasErrors: false }
@@ -496,8 +621,10 @@ export function runLinter(cwd, linter) {
     return { success: false, output: e.stdout || e.stderr || e.message, hasErrors: true }
   }
 }
+
 export function runFormatter(cwd, formatter) {
   if (!formatter.detected) return { success: false, error: "Formatter not detected" }
+
   try {
     execSync(`${formatter.cmd} .`, { cwd, encoding: "utf8", timeout: 60000 })
     return { success: true }
@@ -505,8 +632,10 @@ export function runFormatter(cwd, formatter) {
     return { success: false, error: e.message }
   }
 }
+
 export function runTypeChecker(cwd, checker) {
   if (!checker.detected) return { success: false, error: "Type checker not detected" }
+
   try {
     const output = execSync(checker.cmd, { cwd, encoding: "utf8", timeout: 120000 })
     return { success: true, output, hasErrors: false }
@@ -514,8 +643,10 @@ export function runTypeChecker(cwd, checker) {
     return { success: false, output: e.stdout || e.stderr || e.message, hasErrors: true }
   }
 }
+
 export function runTests(cwd, framework) {
   if (!framework.detected) return { success: false, error: "Test framework not detected" }
+
   const testCmds = {
     jest: "npx jest --passWithNoTests",
     vitest: "npx vitest run",
@@ -524,7 +655,9 @@ export function runTests(cwd, framework) {
     cargo: "cargo test",
     go: "go test ./...",
   }
+
   const cmd = testCmds[framework.framework] || "npm test"
+
   try {
     const output = execSync(cmd, { cwd, encoding: "utf8", timeout: 120000 })
     return { success: true, output, passed: true }
@@ -532,8 +665,14 @@ export function runTests(cwd, framework) {
     return { success: false, output: e.stdout || e.stderr || e.message, passed: false }
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 8. MULTI-FILE EDITOR — редактирование в 15+ файлах
+// ═══════════════════════════════════════════════════════════════════
+
 export function applyEdits(edits, cwd) {
   const results = []
+
   for (const edit of edits) {
     const fullPath = path.resolve(cwd, edit.file)
     try {
@@ -559,8 +698,14 @@ export function applyEdits(edits, cwd) {
       results.push({ file: edit.file, success: false, error: e.message })
     }
   }
+
   return results
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 9. COMMANDS — команды для CLI
+// ═══════════════════════════════════════════════════════════════════
+
 export const CODING_BRAIN_COMMANDS = {
   "/brain": "показать состояние контекста и инструментов",
   "/brain-map": "построить карту репозитория",
@@ -576,6 +721,11 @@ export const CODING_BRAIN_COMMANDS = {
   "/git-merge-auto": "автоматический merge с разрешением конфликтов",
   "/fix-all": "полный цикл: линтер → форматер → типы → тесты",
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 10. DIAGNOSTICS — полная диагностика проекта
+// ═══════════════════════════════════════════════════════════════════
+
 export function diagnoseProject(cwd) {
   const test = detectTestFramework(cwd)
   const lint = detectLinter(cwd)
@@ -584,6 +734,7 @@ export function diagnoseProject(cwd) {
   const git = gitStatus(cwd)
   const spec = loadSpec(cwd)
   const map = buildRepoMap(cwd)
+
   return {
     repo: map.summary,
     spec: spec.exists ? spec.file : "not found",

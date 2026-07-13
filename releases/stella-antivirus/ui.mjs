@@ -3,12 +3,18 @@ import { fullSystemScan, quickScan, scanPath, scanFile, scanRunningProcesses, sc
 import { QUARANTINE_DIR } from "./database.mjs"
 import fs from "node:fs"
 import path from "node:path"
+
+// ═══════════════════════════════════════════════════════════════
+//  STELLAR ANTIVIRUS — Kaspersky-style UI
+// ═══════════════════════════════════════════════════════════════
+
 const COLORS = {
   reset: "\x1b[0m",
   bold: "\x1b[1m",
   dim: "\x1b[2m",
   italic: "\x1b[3m",
   underline: "\x1b[4m",
+
   red: "\x1b[31m",
   green: "\x1b[32m",
   yellow: "\x1b[33m",
@@ -17,6 +23,7 @@ const COLORS = {
   cyan: "\x1b[36m",
   white: "\x1b[37m",
   gray: "\x1b[90m",
+
   bgRed: "\x1b[41m",
   bgGreen: "\x1b[42m",
   bgYellow: "\x1b[43m",
@@ -24,9 +31,11 @@ const COLORS = {
   bgMagenta: "\x1b[45m",
   bgCyan: "\x1b[46m",
 }
+
 function c(color, text) {
   return `${COLORS[color]}${text}${COLORS.reset}`
 }
+
 function bold(text) { return c("bold", text) }
 function dim(text) { return c("dim", text) }
 function red(text) { return c("red", text) }
@@ -34,20 +43,25 @@ function green(text) { return c("green", text) }
 function yellow(text) { return c("yellow", text) }
 function cyan(text) { return c("cyan", text) }
 function magenta(text) { return c("magenta", text) }
+
 function box(title, lines, color = [0, 200, 255]) {
   const [r, g, b] = color
   const ansiColor = `\x1b[38;2;${r};${g};${b}m`
   const reset = "\x1b[0m"
   const maxLen = Math.max(title.length + 4, ...lines.map(l => l.length))
   const width = maxLen + 4
+
   const top = `${ansiColor}╭${"─".repeat(width)}╮${reset}`
   const bottom = `${ansiColor}╰${"─".repeat(width)}╯${reset}`
   const titleLine = `${ansiColor}│${reset} ${ansiColor}${COLORS.bold}${title}${reset}${" ".repeat(width - title.length - 2)}${ansiColor}│${reset}`
+
   const contentLines = lines.map(l =>
     `${ansiColor}│${reset} ${l}${" ".repeat(Math.max(0, width - l.length - 2))}${ansiColor}│${reset}`
   )
+
   return [top, titleLine, `${ansiColor}│${reset}${" ".repeat(width)}${ansiColor}│${reset}`, ...contentLines, bottom].join("\n")
 }
+
 function progressLine(current, total, width = 40) {
   const pct = Math.floor((current / total) * 100)
   const filled = Math.floor((current / total) * width)
@@ -55,6 +69,7 @@ function progressLine(current, total, width = 40) {
   const bar = "█".repeat(filled) + "░".repeat(empty)
   return `  ${cyan(bar)} ${pct}% (${current}/${total})`
 }
+
 function statusIcon(severity) {
   switch (severity) {
     case "critical": return red("●")
@@ -64,6 +79,7 @@ function statusIcon(severity) {
     default: return green("●")
   }
 }
+
 function severityColor(severity) {
   switch (severity) {
     case "critical": return red
@@ -72,6 +88,11 @@ function severityColor(severity) {
     default: return dim
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  BANNER
+// ═══════════════════════════════════════════════════════════════
+
 function printBanner() {
   const gradient = [
     [167, 139, 250], [165, 136, 250], [163, 133, 250], [161, 130, 249],
@@ -83,6 +104,7 @@ function printBanner() {
     [119, 121, 246], [117, 124, 245], [115, 127, 245], [113, 130, 245],
     [111, 133, 245], [109, 136, 244], [107, 139, 244], [105, 142, 243],
   ]
+
   const logo = [
     "  ███████╗████████╗██████╗ ███████╗██████╗ ███╗   ███╗",
     "  ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██╔══██╗████╗ ████║",
@@ -91,6 +113,7 @@ function printBanner() {
     "  ███████║   ██║   ██║  ██║███████╗██║  ██║██║ ╚═╝ ██║",
     "  ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝",
   ]
+
   console.log()
   for (const line of logo) {
     let colored = ""
@@ -101,20 +124,28 @@ function printBanner() {
     }
     console.log(colored + "\x1b[0m")
   }
+
   console.log()
   console.log(`  ${magenta("✦")} ${bold("Stellar Antivirus")}${dim(" · powered by ")}${cyan("Stella")} ${dim("Security Engine")}`)
   console.log()
 }
+
 function printStatusBanner(status, detail = "") {
   const [r, g, b] = status === "safe" ? [0, 200, 100] : status === "warning" ? [255, 200, 0] : [255, 80, 80]
   const ansi = `\x1b[38;2;${r};${g};${b}m`
   const icon = status === "safe" ? "✓" : status === "warning" ? "⚠" : "✗"
+
   console.log()
   console.log(`${ansi}  ╔══════════════════════════════════════════════════════════╗${COLORS.reset}`)
   console.log(`${ansi}  ║  ${icon}  ${bold(detail || (status === "safe" ? "СИСТЕМА ЗАЩИЩЕНА" : "ОБНАРУЖЕНЫ УГРОЗЫ"))}${" ".repeat(Math.max(0, 52 - (detail || "").length))}║${COLORS.reset}`)
   console.log(`${ansi}  ╚══════════════════════════════════════════════════════════╝${COLORS.reset}`)
   console.log()
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  SCAN RESULTS DISPLAY
+// ═══════════════════════════════════════════════════════════════
+
 function displayScanResults(results, scanType = "full") {
   const filtered = results.filter(r => !r.excluded)
   const excludedCount = results.filter(r => r.excluded).length
@@ -122,12 +153,14 @@ function displayScanResults(results, scanType = "full") {
   const warnings = filtered.filter(r => r.clean && r.warnings && r.warnings.length > 0)
   const clean = filtered.filter(r => r.clean && (!r.warnings || r.warnings.length === 0))
   const errors = filtered.filter(r => r.error)
+
   const scanTypeNames = {
     full: "ПОЛНОЕ СКАНИРОВАНИЕ",
     quick: "БЫСТРОЕ СКАНИРОВАНИЕ",
     custom: "СКАНИРОВАНИЕ КАТАЛОГА",
     "boot-sector": "СКАНИРОВАНИЕ MBR",
   }
+
   console.log()
   console.log(box(scanTypeNames[scanType] || "СКАНИРОВАНИЕ", [
     `Файлов:      ${results.length}`,
@@ -137,6 +170,7 @@ function displayScanResults(results, scanType = "full") {
     `Исключено:   ${dim(String(excludedCount))}`,
     `Ошибки:      ${errors.length > 0 ? red(String(errors.length)) : green(String(errors.length))}`,
   ], threats.length > 0 ? [255, 80, 80] : [0, 200, 100]))
+
   if (threats.length > 0) {
     console.log(`\n  ${red(bold("══════ УГРОЗЫ ══════"))}`)
     console.log()
@@ -152,6 +186,7 @@ function displayScanResults(results, scanType = "full") {
       console.log()
     }
   }
+
   if (warnings.length > 0) {
     console.log(`\n  ${yellow(bold("══════ ПРЕДУПРЕЖДЕНИЯ ══════"))}`)
     console.log()
@@ -167,12 +202,18 @@ function displayScanResults(results, scanType = "full") {
     }
     console.log()
   }
+
   if (threats.length === 0 && warnings.length === 0) {
     printStatusBanner("safe")
   } else {
     printStatusBanner("danger")
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN MENU
+// ═══════════════════════════════════════════════════════════════
+
 function printMenu() {
   console.log(box("✦ Stellar AV — Команды", [
     "",
@@ -191,17 +232,25 @@ function printMenu() {
   ], [0, 200, 255]))
   console.log()
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  INTERACTIVE MODE
+// ═══════════════════════════════════════════════════════════════
+
 export function startInteractive() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
   })
+
   printBanner()
   printStatusBanner("safe", "Stellar Antivirus запущен — готов к сканированию")
   printMenu()
+
   const ask = () => {
     rl.question(`${magenta("❯")} `, async (input) => {
       const cmd = input.trim().toLowerCase()
+
       switch (cmd) {
         case "1":
         case "full":
@@ -210,6 +259,7 @@ export function startInteractive() {
           console.log(`  ${cyan("▶")} ${bold("Полное сканирование системы...")}`)
           console.log(`  ${dim("Сканирование всех дисков C:\\, D:\\, ...")}`)
           console.log()
+
           let lastUpdate = Date.now()
           const { results, totalFiles } = fullSystemScan({
             onProgress: (count, file) => {
@@ -219,10 +269,12 @@ export function startInteractive() {
               }
             },
           })
+
           process.stdout.write("\r" + " ".repeat(80) + "\r")
           displayScanResults(results, "full")
           break
         }
+
         case "2":
         case "quick":
         case "быстрое": {
@@ -230,6 +282,7 @@ export function startInteractive() {
           console.log(`  ${cyan("▶")} ${bold("Быстрое сканирование...")}`)
           console.log(`  ${dim("Temp, Downloads, Desktop, Startup, AppData")}`)
           console.log()
+
           let lastUpdate = Date.now()
           const { results } = quickScan({
             onProgress: (count, file) => {
@@ -239,10 +292,12 @@ export function startInteractive() {
               }
             },
           })
+
           process.stdout.write("\r" + " ".repeat(80) + "\r")
           displayScanResults(results, "quick")
           break
         }
+
         case "3":
         case "file":
         case "файл": {
@@ -259,6 +314,7 @@ export function startInteractive() {
           })
           return
         }
+
         case "4":
         case "folder":
         case "папка": {
@@ -267,6 +323,7 @@ export function startInteractive() {
             console.log()
             console.log(`  ${cyan("▶")} ${bold("Сканирование:")} ${dirpath}`)
             console.log()
+
             let lastUpdate = Date.now()
             const { results } = scanPath(dirpath.trim(), {
               onProgress: (count, file) => {
@@ -276,18 +333,21 @@ export function startInteractive() {
                 }
               },
             })
+
             process.stdout.write("\r" + " ".repeat(80) + "\r")
             displayScanResults(results, "custom")
             ask()
           })
           return
         }
+
         case "5":
         case "mbr":
         case "загрузчик": {
           console.log()
           console.log(`  ${cyan("▶")} ${bold("Сканирование MBR (Master Boot Record)...")}`)
           console.log()
+
           const drives = ["C:", "D:", "E:"]
           for (const drive of drives) {
             if (fs.existsSync(drive + "\\")) {
@@ -308,18 +368,21 @@ export function startInteractive() {
           console.log()
           break
         }
+
         case "6":
         case "processes":
         case "процессы": {
           console.log()
           console.log(`  ${cyan("▶")} ${bold("Проверка запущенных процессов...")}`)
           console.log()
+
           const procs = scanRunningProcesses()
           if (procs.length === 0) {
             console.log(`  ${yellow("⚠")} Не удалось получить список процессов`)
           } else {
             const susp = procs.filter(p => p.suspicious)
             const normal = procs.filter(p => !p.suspicious)
+
             console.log(`  Всего процессов: ${procs.length}`)
             console.log(`  ${green("Чистых:")} ${normal.length}`)
             if (susp.length > 0) {
@@ -334,6 +397,7 @@ export function startInteractive() {
           console.log()
           break
         }
+
         case "7":
         case "monitor":
         case "мониторинг": {
@@ -359,6 +423,7 @@ export function startInteractive() {
               console.log(`  ${dim("Проверка каждые 5 секунд...")}`)
               console.log(`  ${dim("Нажмите Ctrl+C для остановки")}`)
               console.log()
+
               startRealTimeMonitor(dir, {
                 interval: 5000,
                 onThreat: (result) => {
@@ -381,6 +446,7 @@ export function startInteractive() {
             return
           }
         }
+
         case "8":
         case "quarantine":
         case "карантин": {
@@ -419,6 +485,7 @@ export function startInteractive() {
           }
           break
         }
+
         case "9":
         case "exclusions":
         case "исключения": {
@@ -439,6 +506,7 @@ export function startInteractive() {
           })
           return
         }
+
         case "10":
         case "report":
         case "отчёт": {
@@ -446,9 +514,11 @@ export function startInteractive() {
           rl.question(`  Тип отчёта (full/quick): `, (type) => {
             console.log(`  ${cyan("▶")} ${bold("Создание отчёта...")}`)
             console.log()
+
             const scanFunc = type === "quick" ? quickScan : fullSystemScan
             const { results } = scanFunc()
             const report = generateReport(results, type || "full")
+
             const filename = `stellar-report-${new Date().toISOString().slice(0, 10)}.json`
             saveReport(report, filename)
             console.log(`  ${green("✓")} Отчёт сохранён: ${filename}`)
@@ -457,6 +527,7 @@ export function startInteractive() {
           })
           return
         }
+
         case "/exit":
         case "exit":
         case "выход": {
@@ -466,23 +537,34 @@ export function startInteractive() {
           rl.close()
           return
         }
+
         case "/help":
         case "help":
         case "помощь": {
           printMenu()
           break
         }
+
         default: {
           console.log(`  ${yellow("⚠")} Неизвестная команда. Введите ${cyan("/help")} для справки.`)
           console.log()
         }
       }
+
       ask()
     })
   }
+
   ask()
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  EXPORTS
+// ═══════════════════════════════════════════════════════════════
+
 export { printBanner, displayScanResults, box, statusIcon, severityColor }
+
+// Run if executed directly
 if (process.argv[1] && process.argv[1].includes("ui.mjs")) {
   startInteractive()
 }

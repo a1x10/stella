@@ -1,6 +1,9 @@
 import { bold, dim, italic, violet, blue, cyan, purple, gray, bgRgb, rgb } from "./theme.mjs"
+
 const codeBg = bgRgb(30, 27, 55)
 const codeFg = rgb(196, 181, 253)
+
+// Inline markdown: **bold**, *italic*, `code`, [link](url)
 export function renderInline(text) {
   let out = text
   out = out.replace(/\*\*([^*]+)\*\*/g, (_, s) => bold(violet(s)))
@@ -9,12 +12,15 @@ export function renderInline(text) {
   out = out.replace(/\[([^\]]+)\][(]([^)]+)[)]/g, (_, label, url) => blue(label) + dim(` (${url})`))
   return out
 }
+
+// Block markdown renderer for a complete markdown string
 export function renderMarkdown(md) {
   const lines = md.split("\n")
   const out = []
   let inCode = false
   let codeLang = ""
   let codeBuf = []
+
   for (const line of lines) {
     const fence = line.match(/^\s*```(\w*)/)
     if (fence) {
@@ -69,6 +75,8 @@ export function renderMarkdown(md) {
   }
   return out.join("\n")
 }
+
+// Streaming renderer: buffers text and flushes rendered lines as they complete
 export function createStreamRenderer(write) {
   let buf = ""
   return {
@@ -76,6 +84,7 @@ export function createStreamRenderer(write) {
       buf += delta
       const idx = buf.lastIndexOf("\n")
       if (idx === -1) return
+      // Don't flush while inside an unclosed code fence
       const flushable = buf.slice(0, idx + 1)
       const fences = (flushable.match(/```/g) || []).length
       if (fences % 2 !== 0) return

@@ -29,17 +29,10 @@ function copy(src, dst) {
 
 function stripComments(code) {
   return code
-    .replace(/\/\/.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*[\r\n]/gm, "")
-    .trim()
 }
 
 function makeReadable(code) {
   return code
-    .replace(/^[ \t]+/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
 }
 
 function addGuard(code) {

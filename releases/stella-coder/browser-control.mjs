@@ -3,13 +3,16 @@ import { writeFileSync, existsSync, mkdirSync } from "fs"
 import { join } from "path"
 import { homedir } from "os"
 import http from "http"
+
 const STELLA_DIR = join(homedir(), ".stella")
 const BROWSER_DIR = join(STELLA_DIR, "browser")
 const PROFILES_DIR = join(BROWSER_DIR, "profiles")
+
 function ensureDir() {
   if (!existsSync(BROWSER_DIR)) mkdirSync(BROWSER_DIR, { recursive: true })
   if (!existsSync(PROFILES_DIR)) mkdirSync(PROFILES_DIR, { recursive: true })
 }
+
 function httpGet(url) {
   return new Promise((resolve, reject) => {
     http.get(url, (res) => {
@@ -21,6 +24,7 @@ function httpGet(url) {
     }).on("error", reject)
   })
 }
+
 export class ChromeBrowser {
   constructor() {
     ensureDir()
@@ -31,6 +35,7 @@ export class ChromeBrowser {
     this.msgId = 0
     this.callbacks = new Map()
   }
+
   async launch(headless = false) {
     const chromePaths = [
       "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -39,13 +44,16 @@ export class ChromeBrowser {
       "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
       "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
     ]
+
     let chromePath = null
     for (const p of chromePaths) {
       if (existsSync(p)) { chromePath = p; break }
     }
+
     if (!chromePath) {
       return { success: false, error: "Chrome/Edge not found" }
     }
+
     const args = [
       `--remote-debugging-port=${this.debugPort}`,
       "--no-first-run",
@@ -54,11 +62,14 @@ export class ChromeBrowser {
       `--user-data-dir=${join(PROFILES_DIR, "default")}`,
       "about:blank",
     ].filter(Boolean)
+
     this.proc = spawn(chromePath, args, { detached: true, stdio: "ignore" })
     this.proc.unref()
+
     await new Promise(r => setTimeout(r, 2000))
+
     try {
-      const tabs = await httpGet(`http:
+      const tabs = await httpGet(`http://127.0.0.1:${this.debugPort}/json`)
       if (tabs && tabs.length > 0) {
         this.pageId = tabs[0].id
         return { success: true, port: this.debugPort, pid: this.proc.pid }
@@ -66,18 +77,22 @@ export class ChromeBrowser {
     } catch (e) {
       return { success: false, error: `Chrome launched but DevTools not ready: ${e.message}` }
     }
+
     return { success: true, port: this.debugPort }
   }
+
   async connect() {
     try {
-      const tabs = await httpGet(`http:
+      const tabs = await httpGet(`http://127.0.0.1:${this.debugPort}/json`)
       if (!tabs || tabs.length === 0) {
         return { success: false, error: "No tabs found. Launch Chrome first." }
       }
+
       const wsUrl = tabs[0].webSocketDebuggerUrl
       if (!wsUrl) {
         return { success: false, error: "WebSocket URL not available" }
       }
+
       return new Promise((resolve) => {
         this.ws = new WebSocket(wsUrl)
         this.ws.onopen = () => {
@@ -99,11 +114,13 @@ export class ChromeBrowser {
       return { success: false, error: e.message }
     }
   }
+
   async sendCommand(method, params = {}) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       const conn = await this.connect()
       if (!conn.success) return { success: false, error: conn.error }
     }
+
     const id = ++this.msgId
     return new Promise((resolve) => {
       this.callbacks.set(id, (msg) => {
@@ -122,11 +139,13 @@ export class ChromeBrowser {
       }, 30000)
     })
   }
+
   async navigate(url) {
     const result = await this.sendCommand("Page.navigate", { url })
     if (result.success) await new Promise(r => setTimeout(r, 2000))
     return result
   }
+
   async getPageContent() {
     const result = await this.sendCommand("Runtime.evaluate", {
       expression: "document.documentElement.outerHTML",
@@ -134,6 +153,7 @@ export class ChromeBrowser {
     })
     return result.success ? { success: true, html: result.result?.value || "" } : result
   }
+
   async getText() {
     const result = await this.sendCommand("Runtime.evaluate", {
       expression: "document.body.innerText",
@@ -141,6 +161,7 @@ export class ChromeBrowser {
     })
     return result.success ? { success: true, text: result.result?.value || "" } : result
   }
+
   async getTitle() {
     const result = await this.sendCommand("Runtime.evaluate", {
       expression: "document.title",
@@ -148,6 +169,7 @@ export class ChromeBrowser {
     })
     return result.success ? { success: true, title: result.result?.value || "" } : result
   }
+
   async screenshot(path) {
     const result = await this.sendCommand("Page.captureScreenshot", { format: "png" })
     if (result.success && result.result?.data) {
@@ -157,6 +179,7 @@ export class ChromeBrowser {
     }
     return result
   }
+
   async evaluate(expression) {
     return await this.sendCommand("Runtime.evaluate", {
       expression,
@@ -164,19 +187,23 @@ export class ChromeBrowser {
       awaitPromise: true,
     })
   }
+
   async click(selector) {
     const posResult = await this.sendCommand("Runtime.evaluate", {
       expression: `(() => { const el = document.querySelector('${selector.replace(/'/g, "\\'")}'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x + r.width/2, y: r.y + r.height/2 }; })()`,
       returnByValue: true,
     })
+
     if (!posResult.success || !posResult.result?.value) {
       return { success: false, error: `Element not found: ${selector}` }
     }
+
     const { x, y } = posResult.result.value
     await this.sendCommand("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 })
     await this.sendCommand("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 })
     return { success: true, x, y }
   }
+
   async type(selector, text) {
     await this.sendCommand("Runtime.evaluate", {
       expression: `document.querySelector('${selector.replace(/'/g, "\\'")}')?.focus()`,
@@ -187,10 +214,12 @@ export class ChromeBrowser {
     }
     return { success: true }
   }
+
   async scroll(deltaX = 0, deltaY = 300) {
     await this.sendCommand("Input.dispatchMouseEvent", { type: "mouseWheel", x: 400, y: 400, deltaX, deltaY })
     return { success: true }
   }
+
   async pressKey(key) {
     const keys = {
       enter: { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 },
@@ -206,6 +235,7 @@ export class ChromeBrowser {
     await this.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", ...k })
     return { success: true }
   }
+
   async fillForm(fields) {
     const results = []
     for (const { selector, value } of fields) {
@@ -213,6 +243,7 @@ export class ChromeBrowser {
     }
     return { success: true, results }
   }
+
   async getLinks() {
     const result = await this.sendCommand("Runtime.evaluate", {
       expression: `Array.from(document.querySelectorAll('a[href]')).map(a => ({ text: a.innerText.trim().slice(0, 100), href: a.href })).filter(a => a.text).slice(0, 50)`,
@@ -220,6 +251,7 @@ export class ChromeBrowser {
     })
     return result.success ? { success: true, links: result.result?.value || [] } : result
   }
+
   async getForms() {
     const result = await this.sendCommand("Runtime.evaluate", {
       expression: `Array.from(document.querySelectorAll('form')).map(f => ({ action: f.action, method: f.method, inputs: Array.from(f.querySelectorAll('input,textarea,select')).map(i => ({ name: i.name, type: i.type, placeholder: i.placeholder })) }))`,
@@ -227,13 +259,16 @@ export class ChromeBrowser {
     })
     return result.success ? { success: true, forms: result.result?.value || [] } : result
   }
+
   close() {
     if (this.ws) this.ws.close()
     if (this.proc) this.proc.kill()
     return { success: true }
   }
+
   static async listTabs(port = 9222) {
-    try { return await httpGet(`http:
+    try { return await httpGet(`http://127.0.0.1:${port}/json`) } catch { return [] }
   }
 }
+
 export default ChromeBrowser

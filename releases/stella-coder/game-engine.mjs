@@ -2,10 +2,13 @@ import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { execSync } from "node:child_process"
+
 const GAMES_DIR = path.join(os.homedir(), ".stella", "games")
+
 function ensureDir() {
   if (!fs.existsSync(GAMES_DIR)) fs.mkdirSync(GAMES_DIR, { recursive: true })
 }
+
 function openFile(filePath) {
   try {
     if (process.platform === "win32") {
@@ -17,6 +20,7 @@ function openFile(filePath) {
     }
   } catch {}
 }
+
 function saveAndOpen(html, name) {
   ensureDir()
   const filename = `${name.replace(/[^a-zA-Z0-9_-]/g, "_")}_${Date.now()}.html`
@@ -25,6 +29,7 @@ function saveAndOpen(html, name) {
   openFile(filePath)
   return { success: true, path: filePath, filename }
 }
+
 const SNAKE_GAME = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Snake</title>
 <style>
@@ -56,6 +61,7 @@ const c=document.getElementById('c'),ctx=c.getContext('2d');
 const S=20,W=c.width/S,H=c.height/S;
 let snake,food,score,best=+localStorage.getItem('snakeBest')||0,dir,loop,speed;
 document.getElementById('best').textContent=best;
+
 function startGame(){
   snake=[{x:10,y:10}];dir={x:1,y:0};score=0;speed=120;
   document.getElementById('score').textContent=0;
@@ -64,10 +70,12 @@ function startGame(){
   clearInterval(loop);
   loop=setInterval(tick,speed);
 }
+
 function placeFood(){
   do{food={x:Math.floor(Math.random()*W),y:Math.floor(Math.random()*H)}}
   while(snake.some(s=>s.x===food.x&&s.y===food.y));
 }
+
 function tick(){
   const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
   if(head.x<0||head.x>=W||head.y<0||head.y>=H||snake.some(s=>s.x===head.x&&s.y===head.y)){
@@ -86,6 +94,7 @@ function tick(){
   }else snake.pop();
   draw();
 }
+
 function draw(){
   ctx.fillStyle='#181825';ctx.fillRect(0,0,c.width,c.height);
   snake.forEach((s,i)=>{
@@ -95,12 +104,14 @@ function draw(){
   ctx.fillStyle='#f38ba8';
   ctx.beginPath();ctx.arc(food.x*S+S/2,food.y*S+S/2,S/2-2,0,Math.PI*2);ctx.fill();
 }
+
 document.addEventListener('keydown',e=>{
   const map={ArrowUp:{x:0,y:-1},ArrowDown:{x:0,y:1},ArrowLeft:{x:-1,y:0},ArrowRight:{x:1,y:0},
     w:{x:0,y:-1},s:{x:0,y:1},a:{x:-1,y:0},d:{x:1,y:0}};
   const nd=map[e.key];
   if(nd&&!(nd.x===-dir.x&&nd.y===-dir.y)){dir=nd;e.preventDefault()}
 });
+
 let tx=0,ty=0;
 c.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;e.preventDefault()},{passive:false});
 c.addEventListener('touchmove',e=>{
@@ -108,8 +119,10 @@ c.addEventListener('touchmove',e=>{
   if(Math.abs(dx)>Math.abs(dy)){dir={x:dx>0?1:-1,y:0}}else{dir={x:0,y:dy>0?1:-1}}
   e.preventDefault();
 },{passive:false});
+
 startGame();
 </script></body></html>`
+
 const TETRIS_GAME = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Tetris</title>
 <style>
@@ -134,6 +147,7 @@ const COLS=10,ROWS=20,S=30;
 const PIECES=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]]];
 const COLORS=['#f38ba8','#fab387','#f9e2af','#a6e3a1','#89b4fa','#cba6f7','#94e2d5'];
 let board,piece,pX,pY,color,score,level,lines,loop,speed;
+
 function startGame(){
   board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
   score=0;level=1;lines=0;speed=500;
@@ -141,20 +155,24 @@ function startGame(){
   document.getElementById('level').textContent=1;
   spawn();clearInterval(loop);loop=setInterval(tick,speed);
 }
+
 function spawn(){
   const i=Math.floor(Math.random()*PIECES.length);
   piece=PIECES[i];color=COLORS[i];pX=Math.floor((COLS-piece[0].length)/2);pY=0;
   if(collides(piece,pX,pY)){clearInterval(loop);alert('Game Over! Score: '+score)}
 }
+
 function collides(p,px,py){
   for(let r=0;r<p.length;r++)for(let c=0;c<p[r].length;c++)
     if(p[r][c]&&(py+r>=ROWS||px+c<0||px+c>=COLS||board[py+r]?.[px+c]))return true;
   return false;
 }
+
 function merge(){
   for(let r=0;r<piece.length;r++)for(let c=0;c<piece[r].length;c++)
     if(piece[r][c])board[pY+r][pX+c]=color;
 }
+
 function clearLines(){
   let cleared=0;
   for(let r=ROWS-1;r>=0;r--){
@@ -164,9 +182,11 @@ function clearLines(){
     document.getElementById('score').textContent=score;document.getElementById('level').textContent=level;
     clearInterval(loop);speed=Math.max(50,500-level*40);loop=setInterval(tick,speed)}
 }
+
 function tick(){
   if(!collides(piece,pX,pY+1)){pY++}else{merge();clearLines();spawn()}draw();
 }
+
 function draw(){
   ctx.fillStyle='#181825';ctx.fillRect(0,0,c.width,c.height);
   for(let r=0;r<ROWS;r++)for(let cl=0;cl<COLS;cl++)
@@ -178,10 +198,12 @@ function draw(){
   for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*S);ctx.lineTo(c.width,r*S);ctx.stroke()}
   for(let cl=0;cl<=COLS;cl++){ctx.beginPath();ctx.moveTo(cl*S,0);ctx.lineTo(cl*S,c.height);ctx.stroke()}
 }
+
 function rotate(){
   const rot=piece[0].map((_,i)=>piece.map(r=>r[i]).reverse());
   if(!collides(rot,pX,pY))piece=rot;
 }
+
 document.addEventListener('keydown',e=>{
   const map={ArrowLeft:()=>{if(!collides(piece,pX-1,pY))pX--},
     ArrowRight:()=>{if(!collides(piece,pX+1,pY))pX++},
@@ -189,6 +211,7 @@ document.addEventListener('keydown',e=>{
     ArrowUp:()=>rotate(),' ':()=>{while(!collides(piece,pX,pY+1))pY++;merge();clearLines();spawn();draw()}};
   if(map[e.key]){map[e.key]();e.preventDefault()}
 });
+
 let tx=0;
 c.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;e.preventDefault()},{passive:false});
 c.addEventListener('touchend',e=>{
@@ -197,8 +220,10 @@ c.addEventListener('touchend',e=>{
   else{!collides(piece,pX,pY+1)?pY++:(merge(),clearLines(),spawn())}
   draw();
 });
+
 startGame();
 </script></body></html>`
+
 const MINESWEEPER_GAME = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Minesweeper</title>
 <style>
@@ -224,6 +249,7 @@ h1{font-size:24px;margin-bottom:8px;color:#f9e2af}
 const ROWS=10,COLS=10,MINES=15;
 let board,revealed,flagged,gameOver,firstClick;
 const colors=['','#89b4fa','#a6e3a1','#f38ba8','#cba6f7','#fab387','#94e2d5','#cdd6f4','#6c7086'];
+
 function initGame(){
   board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
   revealed=Array.from({length:ROWS},()=>Array(COLS).fill(false));
@@ -233,6 +259,7 @@ function initGame(){
   document.getElementById('flags').textContent=0;
   render();
 }
+
 function placeMines(safeR,safeC){
   let placed=0;
   while(placed<MINES){
@@ -249,11 +276,13 @@ function placeMines(safeR,safeC){
     board[r][c]=count;
   }
 }
+
 function reveal(r,c){
   if(r<0||r>=ROWS||c<0||c>=COLS||revealed[r][c]||flagged[r][c])return;
   revealed[r][c]=true;
   if(board[r][c]===0){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++)reveal(r+dr,c+dc)}
 }
+
 function render(){
   const el=document.getElementById('board');
   el.style.gridTemplateColumns='repeat('+COLS+',32px)';
@@ -286,8 +315,10 @@ function render(){
     el.appendChild(cell);
   }
 }
+
 initGame();
 </script></body></html>`
+
 const GAME_2048 = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>2048</title>
 <style>
@@ -307,18 +338,21 @@ h1{font-size:24px;margin-bottom:8px;color:#fab387}
 <script>
 let grid,score,best=+localStorage.getItem('2048best')||0;
 document.getElementById('best').textContent=best;
+
 function startGame(){
   grid=Array.from({length:4},()=>Array(4).fill(0));score=0;
   document.getElementById('score').textContent=0;
   document.getElementById('go')&&(document.getElementById('go').style.display='none');
   addTile();addTile();render();
 }
+
 function addTile(){
   const empty=[];for(let r=0;r<4;r++)for(let c=0;c<4;c++)if(!grid[r][c])empty.push([r,c]);
   if(!empty.length)return;
   const[r,c]=empty[Math.floor(Math.random()*empty.length)];
   grid[r][c]=Math.random()<0.9?2:4;
 }
+
 function render(){
   const el=document.getElementById('board');el.innerHTML='';
   const tileColors={0:'#313244',2:'#cdd6f4',4:'#a6adc8',8:'#fab387',16:'#f38ba8',32:'#eba0ac',64:'#f38ba8',128:'#94e2d5',256:'#a6e3a1',512:'#f9e2af',1024:'#89b4fa',2048:'#cba6f7'};
@@ -329,10 +363,12 @@ function render(){
     cell.textContent=grid[r][c]||'';el.appendChild(cell);
   }
 }
+
 function slide(row){
   let a=row.filter(x=>x);for(let i=0;i<a.length-1;i++)if(a[i]===a[i+1]){a[i]*=2;a[i+1]=0;score+=a[i]}
   while(a.length<4)a.push(0);return a;
 }
+
 function move(dir){
   let moved=false;const prev=JSON.stringify(grid);
   if(dir==='left'){for(let r=0;r<4;r++)grid[r]=slide(grid[r])}
@@ -345,6 +381,7 @@ function move(dir){
   if(moved)render();
   if(!canMove()){alert('Game Over! Score: '+score)}
 }
+
 function canMove(){
   for(let r=0;r<4;r++)for(let c=0;c<4;c++){
     if(!grid[r][c])return true;
@@ -353,18 +390,22 @@ function canMove(){
   }
   return false;
 }
+
 document.addEventListener('keydown',e=>{
   const map={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up',s:'down'};
   if(map[e.key]){move(map[e.key]);e.preventDefault()}
 });
+
 let tx=0,ty=0;
 document.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;e.preventDefault()},{passive:false});
 document.addEventListener('touchend',e=>{
   const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
   if(Math.abs(dx)>Math.abs(dy)){dx>0?move('right'):move('left')}else{dy>0?move('down'):move('up')}
 });
+
 startGame();
 </script></body></html>`
+
 const FLAPPY_BIRD_GAME = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Flappy Bird</title>
 <style>
@@ -384,12 +425,14 @@ canvas{border:2px solid #45475a;border-radius:8px;background:#181825}
 const c=document.getElementById('c'),ctx=c.getContext('2d');
 let bird,pipes,score,best=+localStorage.getItem('flappyBest')||0,frame,gravity=0.5,jump=-8,pipeW=60,pipeGap=150,speed=2,running=false;
 document.getElementById('best').textContent=best;
+
 function startGame(){
   bird={x:100,y:300,vy:0,r:15};pipes=[];score=0;frame=0;running=true;
   document.getElementById('score').textContent=0;
   for(let i=0;i<5;i++)pipes.push({x:400+i*200,h:100+Math.random()*300});
   cancelAnimationFrame(loop);loop=requestAnimationFrame(tick);
 }
+
 function tick(){
   if(!running)return;
   bird.vy+=gravity;bird.y+=bird.vy;
@@ -404,6 +447,7 @@ function tick(){
   pipes=pipes.filter(p=>p.x>-pipeW);
   draw();frame=requestAnimationFrame(tick);
 }
+
 function draw(){
   ctx.fillStyle='#181825';ctx.fillRect(0,0,c.width,c.height);
   pipes.forEach(p=>{
@@ -413,16 +457,20 @@ function draw(){
   ctx.fillStyle='#f9e2af';ctx.beginPath();ctx.arc(bird.x,bird.y,bird.r,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#1e1e2e';ctx.beginPath();ctx.arc(bird.x+5,bird.y-3,3,0,Math.PI*2);ctx.fill();
 }
+
 function endGame(){
   running=false;
   if(score>best){best=score;localStorage.setItem('flappyBest',best);document.getElementById('best').textContent=best}
   alert('Game Over! Score: '+score);
 }
+
 document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){if(running)bird.vy=jump;e.preventDefault()}});
 c.addEventListener('click',()=>{if(running)bird.vy=jump});
 c.addEventListener('touchstart',e=>{if(running)bird.vy=jump;e.preventDefault()},{passive:false});
+
 startGame();
 </script></body></html>`
+
 const TIC_TAC_TOE_GAME = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Tic Tac Toe</title>
 <style>
@@ -447,16 +495,19 @@ h1{font-size:24px;margin-bottom:8px;color:#89b4fa}
 <script>
 let board,turn,gameOver,pvpMode=true;
 const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
 function startGame(){
   board=Array(9).fill('');turn='X';gameOver=false;
   document.getElementById('info').textContent='Ход X';
   render();
 }
+
 function toggleMode(){
   pvpMode=!pvpMode;
   document.getElementById('mode').textContent=pvpMode?'Игрок vs ИИ':'Игрок vs Игрок';
   startGame();
 }
+
 function render(){
   const el=document.getElementById('board');el.innerHTML='';
   board.forEach((v,i)=>{
@@ -466,6 +517,7 @@ function render(){
     el.appendChild(cell);
   });
 }
+
 function play(i){
   if(board[i]||gameOver)return;
   board[i]=turn;render();
@@ -475,6 +527,7 @@ function play(i){
   document.getElementById('info').textContent='Ход '+turn;
   if(!pvpMode&&turn==='O'&&!gameOver)aiMove();
 }
+
 function aiMove(){
   for(const w of wins){
     const vals=w.map(i=>board[i]);
@@ -490,15 +543,19 @@ function aiMove(){
   const empty=board.map((v,i)=>v?'':i).filter(v=>v!=='');
   if(empty.length)play(empty[Math.floor(Math.random()*empty.length)]);
 }
+
 function checkWin(p){
   return wins.some(w=>w.every(i=>board[i]===p));
 }
+
 function highlightWin(){
   const w=wins.find(w=>w.every(i=>board[i]===turn));
   if(w){const cells=document.querySelectorAll('.cell');w.forEach(i=>cells[i].classList.add('win'))}
 }
+
 startGame();
 </script></body></html>`
+
 const SUDOKU_GAME = `
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sudoku</title>
 <style>
@@ -528,11 +585,13 @@ h1{font-size:24px;margin-bottom:8px;color:#cba6f7}
 let puzzle,solution,selected,errors;
 const easy=[[0,0,3,0,2,0,6,0,0],[9,0,0,3,0,5,0,0,1],[0,0,1,8,0,6,4,0,0],[0,0,8,1,0,2,9,0,0],[7,0,0,0,0,0,0,0,8],[0,0,6,7,0,8,2,0,0],[0,0,2,6,0,9,5,0,0],[8,0,0,2,0,3,0,0,9],[0,0,5,0,1,0,3,0,0]];
 const solutionEasy=[[4,8,3,9,2,1,6,5,7],[9,6,7,3,4,5,8,2,1],[2,5,1,8,7,6,4,9,3],[5,4,8,1,3,2,9,7,6],[7,2,9,5,6,4,1,3,8],[1,3,6,7,9,8,2,4,5],[3,7,2,6,8,9,5,1,4],[8,1,4,2,5,3,7,6,9],[6,9,5,4,1,7,3,8,2]];
+
 function newGame(){
   puzzle=easy.map(r=>[...r]);solution=solutionEasy;selected=null;errors=0;
   document.getElementById('errors').textContent=0;
   render();
 }
+
 function render(){
   const el=document.getElementById('board');el.innerHTML='';
   for(let r=0;r<9;r++)for(let c=0;c<9;c++){
@@ -553,6 +612,7 @@ function render(){
     np.appendChild(btn);
   }
 }
+
 function placeNumber(n){
   if(!selected)return;
   puzzle[selected.r][selected.c]=n;
@@ -560,6 +620,7 @@ function placeNumber(n){
   if(puzzle.every((r,ri)=>r.every((c,ci)=>c===solution[ri][ci])))alert('Congratulations! You won!');
   render();
 }
+
 document.addEventListener('keydown',e=>{
   if(!selected)return;
   const n=parseInt(e.key);
@@ -568,33 +629,43 @@ document.addEventListener('keydown',e=>{
   const dir={ArrowUp:{r:-1,c:0},ArrowDown:{r:1,c:0},ArrowLeft:{r:0,c:-1},ArrowRight:{r:0,c:1}};
   if(dir[e.key]){selected.r=(selected.r+dir[e.key].r+9)%9;selected.c=(selected.c+dir[e.key].c+9)%9;render();e.preventDefault()}
 });
+
 newGame();
 </script></body></html>`
+
 export class GameEngine {
   constructor() {
     ensureDir()
   }
+
   async playSnake() {
     return saveAndOpen(SNAKE_GAME, "snake")
   }
+
   async playTetris() {
     return saveAndOpen(TETRIS_GAME, "tetris")
   }
+
   async playMinesweeper() {
     return saveAndOpen(MINESWEEPER_GAME, "minesweeper")
   }
+
   async play2048() {
     return saveAndOpen(GAME_2048, "2048")
   }
+
   async playFlappyBird() {
     return saveAndOpen(FLAPPY_BIRD_GAME, "flappy")
   }
+
   async playTicTacToe() {
     return saveAndOpen(TIC_TAC_TOE_GAME, "tictactoe")
   }
+
   async playSudoku() {
     return saveAndOpen(SUDOKU_GAME, "sudoku")
   }
+
   async play(gameName) {
     const games = {
       snake: () => this.playSnake(),
@@ -614,12 +685,15 @@ export class GameEngine {
     if (fn) return fn()
     return { success: false, error: `Unknown game: ${gameName}. Available: ${Object.keys(games).join(", ")}` }
   }
+
   async createCustomGame(html, name = "custom") {
     return saveAndOpen(html, name)
   }
+
   listGames() {
     return ["snake", "tetris", "2048", "minesweeper", "flappy-bird", "tic-tac-toe", "sudoku"]
   }
+
   listSaved() {
     if (!fs.existsSync(GAMES_DIR)) return []
     return fs.readdirSync(GAMES_DIR)

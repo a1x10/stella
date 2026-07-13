@@ -2,10 +2,13 @@ import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { execSync } from "node:child_process"
+
 const MAPS_DIR = path.join(os.homedir(), ".stella", "yandex-maps")
+
 function ensureDir() {
   if (!fs.existsSync(MAPS_DIR)) fs.mkdirSync(MAPS_DIR, { recursive: true })
 }
+
 function openFile(filePath) {
   try {
     if (process.platform === "win32") {
@@ -17,6 +20,7 @@ function openFile(filePath) {
     }
   } catch {}
 }
+
 const YANDEX_MAP_TEMPLATE = `
 <!DOCTYPE html>
 <html lang="ru">
@@ -24,7 +28,7 @@ const YANDEX_MAP_TEMPLATE = `
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{TITLE}}</title>
-  <script src="https:
+  <script src="https://api-maps.yandex.ru/2.1/?apikey={{API_KEY}}&lang=ru_RU"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -80,11 +84,17 @@ const YANDEX_MAP_TEMPLATE = `
         zoom: {{ZOOM}},
         controls: ['zoomControl', 'fullscreenControl', 'geolocationControl', 'typeSelector']
       });
+
       {{MARKERS_JS}}
+
       {{PLACEMARKS_JS}}
+
       {{POLYLINE_JS}}
+
       {{POLYGON_JS}}
+
       {{CIRCLE_JS}}
+
       document.getElementById('searchInput').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
           const query = this.value;
@@ -105,36 +115,44 @@ const YANDEX_MAP_TEMPLATE = `
           });
         }
       });
+
       {{GEOLOCATION_JS}}
+
       function showInfo(title, body) {
         document.getElementById('infoTitle').textContent = title;
         document.getElementById('infoBody').innerHTML = body;
         document.getElementById('infoPanel').style.display = 'block';
       }
+
       {{CUSTOM_JS}}
     });
   </script>
 </body>
 </html>`
+
 export class YandexMaps {
   constructor(apiKey = "") {
     this.apiKey = apiKey || process.env.YANDEX_MAPS_API_KEY || ""
     ensureDir()
   }
+
   isConfigured() {
     return !!this.apiKey
   }
+
   setApiKey(key) {
     this.apiKey = key
   }
+
   async geocode(query) {
     if (!this.apiKey) return { success: false, error: "API key not set. Use /ymaps-key <key>" }
     const resp = await fetch(
-      `https:
+      `https://geocode-maps.yandex.ru/1.x/?apikey=${this.apiKey}&geocode=${encodeURIComponent(query)}&format=json&lang=ru_RU`
     )
     const data = await resp.json()
     const member = data.response?.GeoObjectCollection?.featureMember?.[0]
     if (!member) return { success: false, error: "Not found" }
+
     const geo = member.GeoObject
     const pos = geo.Point?.pos?.split(" ") || []
     return {
@@ -147,13 +165,15 @@ export class YandexMaps {
       postalCode: geo.metaDataProperty?.GeocoderMetaData?.Address?.postal_code,
     }
   }
+
   async reverseGeocode(lat, lng) {
     return this.geocode(`${lng},${lat}`)
   }
+
   async searchNearby(lat, lng, query, radius = 1000) {
     if (!this.apiKey) return { success: false, error: "API key not set" }
     const resp = await fetch(
-      `https:
+      `https://geocode-maps.yandex.ru/1.x/?apikey=${this.apiKey}&geocode=${lng},${lat}&format=json&lang=ru_RU&results=10&kind=house`
     )
     const data = await resp.json()
     const members = data.response?.GeoObjectCollection?.featureMember || []
@@ -167,14 +187,17 @@ export class YandexMaps {
       })),
     }
   }
+
   async getStaticMap({ center = [55.7558, 37.6173], zoom = 12, markers = [], polylines = [], size = "650x450" } = {}) {
     if (!this.apiKey) return { success: false, error: "API key not set" }
     const [lat, lng] = center
-    let url = `https:
+    let url = `https://static-maps.yandex.ru/v1?ll=${lng},${lat}&z=${zoom}&size=${size}&apikey=${this.apiKey}`
+
     if (markers.length > 0) {
       const pt = markers.map(m => `${m.lng || m[1]},${m.lat || m[0]},pm2${m.color || "rdm"}`).join("~")
       url += `&pt=${pt}`
     }
+
     try {
       const resp = await fetch(url)
       const buffer = Buffer.from(await resp.arrayBuffer())
@@ -186,6 +209,7 @@ export class YandexMaps {
       return { success: false, error: e.message }
     }
   }
+
   async createMap({
     center = [55.7558, 37.6173],
     zoom = 12,
@@ -216,6 +240,7 @@ export class YandexMaps {
           showInfo(\`${label}\`, \`${content}<br>Координаты: ${lat}, ${lng}\`);
         });`
     }).join("\n      ")
+
     const polylineJs = polylines.map((p, i) => {
       const coords = p.coords || p
       const color = p.color || "#7c3aed"
@@ -227,6 +252,7 @@ export class YandexMaps {
         });
         map.geoObjects.add(pl${i});`
     }).join("\n      ")
+
     const polygonJs = polygons.map((p, i) => {
       const coords = p.coords || p
       const fillColor = p.fillColor || "rgba(124,58,237,0.2)"
@@ -239,6 +265,7 @@ export class YandexMaps {
         });
         map.geoObjects.add(pg${i});`
     }).join("\n      ")
+
     const circleJs = circles.map((c, i) => {
       const [lat, lng] = Array.isArray(c.center) ? c.center : [c.center.lat, c.center.lng]
       const radius = c.radius || 1000
@@ -250,6 +277,7 @@ export class YandexMaps {
         });
         map.geoObjects.add(cr${i});`
     }).join("\n      ")
+
     const geoJs = showGeolocation ? `
       ymaps.geolocation.get({ provider: 'yandex' }).then(function(result) {
         map.setCenter(result.position, 14);
@@ -259,6 +287,7 @@ export class YandexMaps {
         }, { preset: 'islands#greenDotIcon' });
         map.geoObjects.add(pmGeo);
       });` : ""
+
     const customJs = polylines.some(p => p.route) ? `
       ymaps.route([${JSON.stringify(polylines.find(p => p.route)?.coords || [])}]).then(function(route) {
         map.geoObjects.add(route);
@@ -266,6 +295,7 @@ export class YandexMaps {
         document.getElementById('routeInfo').style.display = 'block';
         document.getElementById('routeDetails').textContent = 'Расстояние: ' + route.getHumanLength();
       });` : ""
+
     const html = YANDEX_MAP_TEMPLATE
       .replace("{{TITLE}}", title)
       .replace("{{API_KEY}}", this.apiKey)
@@ -279,18 +309,21 @@ export class YandexMaps {
       .replace("{{CIRCLE_JS}}", circleJs)
       .replace("{{GEOLOCATION_JS}}", geoJs)
       .replace("{{CUSTOM_JS}}", customJs)
+
     const filename = `yamap_${Date.now()}.html`
     const filePath = path.join(MAPS_DIR, filename)
     fs.writeFileSync(filePath, html)
     openFile(filePath)
     return { success: true, path: filePath, filename }
   }
+
   async showRoute(from, to, mode = "auto") {
     const fromGeo = await this.geocode(from)
     const toGeo = await this.geocode(to)
     if (!fromGeo.success || !toGeo.success) {
       return { success: false, error: "Could not geocode addresses" }
     }
+
     return this.createMap({
       center: [
         (fromGeo.coordinates.lat + toGeo.coordinates.lat) / 2,
@@ -311,9 +344,11 @@ export class YandexMaps {
       title: `Маршрут: ${from} → ${to}`,
     })
   }
+
   async showLocation(query) {
     const geo = await this.geocode(query)
     if (!geo.success) return { success: false, error: geo.error }
+
     return this.createMap({
       center: [geo.coordinates.lat, geo.coordinates.lng],
       zoom: 16,
@@ -326,9 +361,11 @@ export class YandexMaps {
       title: geo.name,
     })
   }
+
   async showMultiplePlaces(places) {
     const markers = []
     const coords = []
+
     for (const place of places) {
       const geo = typeof place === "string" ? await this.geocode(place) : place
       if (geo.success || geo.coordinates) {
@@ -342,9 +379,12 @@ export class YandexMaps {
         coords.push([c.lat, c.lng])
       }
     }
+
     if (coords.length === 0) return { success: false, error: "No places found" }
+
     const avgLat = coords.reduce((s, c) => s + c[0], 0) / coords.length
     const avgLng = coords.reduce((s, c) => s + c[1], 0) / coords.length
+
     return this.createMap({
       center: [avgLat, avgLng],
       zoom: coords.length > 5 ? 10 : 12,
@@ -352,9 +392,11 @@ export class YandexMaps {
       title: `Места (${markers.length})`,
     })
   }
+
   async showRouteFromHere(fromLat, fromLng, toQuery) {
     const toGeo = await this.geocode(toQuery)
     if (!toGeo.success) return { success: false, error: toGeo.error }
+
     return this.createMap({
       center: [(fromLat + toGeo.coordinates.lat) / 2, (fromLng + toGeo.coordinates.lng) / 2],
       zoom: 11,
@@ -369,6 +411,7 @@ export class YandexMaps {
       title: `Маршрут до ${toGeo.name}`,
     })
   }
+
   listMaps() {
     if (!fs.existsSync(MAPS_DIR)) return []
     return fs.readdirSync(MAPS_DIR)

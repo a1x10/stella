@@ -2,7 +2,11 @@ import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { execSync } from "node:child_process"
+
+// Конфигурация MCP серверов
 const MCP_CONFIG_PATH = path.join(os.homedir(), ".stella", "mcp.json")
+
+// Дефолтные MCP серверы
 const DEFAULT_SERVERS = {
   "filesystem": {
     command: "npx",
@@ -55,12 +59,14 @@ const DEFAULT_SERVERS = {
     icon: "📤",
   },
 }
+
 class MCPManager {
   constructor() {
     this.servers = new Map()
     this.tools = new Map()
     this.config = this.loadConfig()
   }
+
   loadConfig() {
     try {
       if (fs.existsSync(MCP_CONFIG_PATH)) {
@@ -69,11 +75,14 @@ class MCPManager {
     } catch {}
     return { servers: {} }
   }
+
   saveConfig() {
     const dir = path.dirname(MCP_CONFIG_PATH)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(this.config, null, 2), "utf8")
   }
+
+  // Регистрация сервера
   async addServer(name, serverConfig) {
     this.config.servers[name] = {
       command: serverConfig.command,
@@ -85,6 +94,8 @@ class MCPManager {
     this.saveConfig()
     return { success: true, message: `Сервер "${name}" добавлен` }
   }
+
+  // Удаление сервера
   async removeServer(name) {
     if (this.config.servers[name]) {
       delete this.config.servers[name]
@@ -94,13 +105,18 @@ class MCPManager {
     }
     return { error: `Сервер "${name}" не найден` }
   }
+
+  // Запуск сервера (симуляция для CLI)
   async startServer(name) {
     const server = this.config.servers[name] || DEFAULT_SERVERS[name]
     if (!server) {
       return { error: `Сервер "${name}" не найден` }
     }
+
     console.log(`\n  🔌 Запуск MCP сервера: ${name}`)
     console.log(`  ${server.description}`)
+
+    // Проверяем доступность
     try {
       const cmd = `${server.command} ${server.args.join(" ")} --help`
       execSync(cmd, { stdio: "pipe", timeout: 5000 })
@@ -114,10 +130,14 @@ class MCPManager {
       return { success: true, status: "installed" }
     }
   }
+
+  // Остановка сервера
   async stopServer(name) {
     this.servers.delete(name)
     return { success: true, message: `Сервер "${name}" остановлен` }
   }
+
+  // Получение инструментов сервера
   getServerTools(name) {
     const serverTools = {
       "filesystem": [
@@ -156,6 +176,8 @@ class MCPManager {
     }
     return serverTools[name] || []
   }
+
+  // Список серверов
   listServers() {
     const all = { ...DEFAULT_SERVERS, ...this.config.servers }
     return Object.entries(all).map(([name, config]) => ({
@@ -164,6 +186,8 @@ class MCPManager {
       status: this.servers.get(name)?.status || "stopped",
     }))
   }
+
+  // Список всех доступных инструментов
   getAllTools() {
     const tools = []
     for (const [serverName] of this.servers) {
@@ -173,12 +197,17 @@ class MCPManager {
     return tools
   }
 }
+
+// Экспорт singleton
 export const mcp = new MCPManager()
+
+// Команды MCP для CLI
 export const MCP_COMMANDS = {
   "/mcp": {
     description: "Управление MCP серверами",
     handler: async (args) => {
       const [subcommand, ...rest] = args.split(" ")
+
       switch (subcommand) {
         case "list":
         case "ls": {
@@ -192,12 +221,14 @@ export const MCP_COMMANDS = {
           }
           return
         }
+
         case "start": {
           const name = rest[0]
           if (!name) { console.log("  Использование: /mcp start <имя>"); return }
           await mcp.startServer(name)
           return
         }
+
         case "stop": {
           const name = rest[0]
           if (!name) { console.log("  Использование: /mcp stop <имя>"); return }
@@ -205,6 +236,7 @@ export const MCP_COMMANDS = {
           console.log(`  ✓ Сервер "${name}" остановлен`)
           return
         }
+
         case "add": {
           const [name, command, ...args] = rest
           if (!name || !command) {
@@ -215,6 +247,7 @@ export const MCP_COMMANDS = {
           console.log(`  ✓ Сервер "${name}" добавлен`)
           return
         }
+
         case "remove":
         case "rm": {
           const name = rest[0]
@@ -223,6 +256,7 @@ export const MCP_COMMANDS = {
           console.log(`  ✓ Сервер "${name}" удалён`)
           return
         }
+
         case "tools": {
           const tools = mcp.getAllTools()
           if (tools.length === 0) {
@@ -236,9 +270,11 @@ export const MCP_COMMANDS = {
           }
           return
         }
+
         default:
           console.log(`
   MCP (Model Context Protocol) — подключение к внешним серверам
+
   Команды:
     /mcp list      — список серверов
     /mcp start <имя> — запустить сервер
@@ -246,6 +282,7 @@ export const MCP_COMMANDS = {
     /mcp add <имя> <команда> [args] — добавить сервер
     /mcp remove <имя> — удалить сервер
     /mcp tools    — список инструментов
+
   Популярные серверы:
     filesystem  — файловая система
     github      — GitHub API

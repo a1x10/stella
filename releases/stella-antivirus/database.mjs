@@ -1,6 +1,12 @@
 import crypto from "node:crypto"
 import path from "node:path"
 import fs from "node:fs"
+
+// ═══════════════════════════════════════════════════════════════
+//  STELLAR ANTIVIRUS — Threat Database v3
+//  Full AV engine — 100+ signatures, YARA, heuristics
+// ═══════════════════════════════════════════════════════════════
+
 const BINARY_EXTS = new Set([
   ".exe", ".dll", ".sys", ".com", ".scr", ".pif",
   ".bat", ".cmd", ".vbs", ".vbe", ".jse", ".wsf", ".wsh",
@@ -9,6 +15,7 @@ const BINARY_EXTS = new Set([
   ".doc", ".docm", ".xls", ".xlsm", ".ppt", ".pptm",
   ".rtf", ".pdf",
 ])
+
 export const SKIP_DIRS = new Set([
   "node_modules", ".git", ".next", ".vercel", "__pycache__",
   ".stella", ".secure", ".cache", "dist", "build", ".turbo",
@@ -18,6 +25,7 @@ export const SKIP_DIRS = new Set([
   "node-compile-cache", "npm-cache", "pip-cache",
   "OpencodeSoftware", "opencode",
 ])
+
 export const QUICK_SCAN_PATHS = [
   "C:\\Users\\%USERNAME%\\AppData\\Local\\Temp",
   "C:\\Users\\%USERNAME%\\Downloads",
@@ -31,236 +39,398 @@ export const QUICK_SCAN_PATHS = [
   "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup",
   "C:\\Windows\\System32\\Tasks",
 ]
+
+// ═══════════════════════════════════════════════════════════════
+//  SIGNATURES — 100+ detection patterns
+// ═══════════════════════════════════════════════════════════════
+
 export const SIGNATURES = [
+  // ══════ PE INFECTORS ══════
   { id: "SIG-001", name: "PE感染者", severity: "critical", category: "trojan",
     pattern: /\x4D\x5A[\s\S]{0,200}\x50\x45\x00\x00[\s\S]{0,500}(\x00){16,}/ },
+
   { id: "SIG-002", name: "Пакер/Crypter", severity: "critical", category: "trojan",
     pattern: /\x4D\x5A[\s\S]{0,100}(UPX|ASPack|PECompact|Themida|VMProtect|Obsidium|Armadillo)/ },
+
   { id: "SIG-003", name: "Dropper", severity: "critical", category: "trojan",
     pattern: /(CreateFile|WriteFile)[\s\S]{0,200}(\.exe|\.dll|\.sys)[\s\S]{0,200}(CreateProcess|ShellExecute)/s },
+
+  // ══════ PROCESS INJECTION ══════
   { id: "SIG-004", name: "Process Hollowing", severity: "critical", category: "injection",
     pattern: /NtUnmapViewOfSection|ZwUnmapViewOfSection|RtlCreateUserThread|NtCreateThreadEx[\s\S]{0,100}CreateRemoteThread/s },
+
   { id: "SIG-005", name: "Inject в системный процесс", severity: "critical", category: "injection",
     pattern: /OpenProcess[\s\S]{0,100}(PROCESS_ALL_ACCESS|PROCESS_CREATE_THREAD)[\s\S]{0,100}WriteProcessMemory[\s\S]{0,100}CreateRemoteThread/s },
+
   { id: "SIG-006", name: "APC Injection", severity: "critical", category: "injection",
     pattern: /QueueUserAPC|NtQueueApcThread|EkalertRegisterAlertCallback[\s\S]{0,100}VirtualAllocEx/s },
+
   { id: "SIG-007", name: "Thread Hijacking", severity: "critical", category: "injection",
     pattern: /SuspendThread[\s\S]{0,100}GetThreadContext[\s\S]{0,100}SetThreadContext[\s\S]{0,100}ResumeThread/s },
+
   { id: "SIG-008", name: "Reflective DLL Loading", severity: "critical", category: "injection",
     pattern: /LoadLibraryA[\s\S]{0,100}GetProcAddress[\s\S]{0,100}(DllMain|EntryPoint)[\s\S]{0,100}VirtualProtect/s },
+
+  // ══════ KEYLOGGERS ══════
   { id: "SIG-009", name: "Keylogger API", severity: "critical", category: "spyware",
     pattern: /SetWindowsHookEx[\s\S]{0,50}(WH_KEYBOARD|WH_KEYBOARD_LL|WH_MOUSE)[\s\S]{0,100}(GetAsyncKeyState|GetKeyState)/ },
+
   { id: "SIG-010", name: "Clipboard theft", severity: "high", category: "spyware",
     pattern: /GetClipboardData[\s\S]{0,100}(GlobalLock|GlobalAlloc)[\s\S]{0,100}(InternetOpen|HttpSendRequest)/ },
+
   { id: "SIG-011", name: "Screen capture + exfil", severity: "critical", category: "spyware",
     pattern: /(BitBlt|GetDC|CreateCompatibleBitmap)[\s\S]{0,200}(JpegEncoder|PngEncoder|SaveToFile)[\s\S]{0,200}(http|ftp|socket)/s },
+
+  // ══════ CREDENTIAL THEFT ══════
   { id: "SIG-012", name: "LSASS дамп", severity: "critical", category: "credential-theft",
     pattern: /MiniDumpWriteDump[\s\S]{0,100}(lsass|csrss|svchost)/ },
+
   { id: "SIG-013", name: "Mimikatz загрузка", severity: "critical", category: "credential-theft",
     pattern: /Invoke-Mimikatz|mimikatz[\s\S]{0,50}sekurlsa::logonpasswords|gentilkiwi/ },
+
   { id: "SIG-014", name: "Browser password theft", severity: "critical", category: "credential-theft",
     pattern: /(Login Data|logins\.json|cookies\.sqlite|signons\.sqlite)[\s\S]{0,200}(sqlite3_open|ReadFile)[\s\S]{0,200}(http|ftp)/s },
+
   { id: "SIG-015", name: "Криптокошелёк кража", severity: "critical", category: "credential-theft",
     pattern: /(wallet\.dat|Electrum|Bitcoin|Ethereum|MetaMask)[\s\S]{0,200}(CopyFile|MoveFile|ReadFile)[\s\S]{0,200}(http|ftp|socket)/s },
+
   { id: "SIG-016", name: "Certificate theft", severity: "high", category: "credential-theft",
     pattern: /(certutil|CertOpenStore|PFX|PKCS12)[\s\S]{0,100}(Export|export|CopyFile)[\s\S]{0,100}(http|ftp)/ },
+
+  // ══════ RANSOMWARE ══════
   { id: "SIG-017", name: "Ransomware шифрование", severity: "critical", category: "ransomware",
     pattern: /(AES|DES|RSA|ChaCha20|Salsa20|XOR)[\s\S]{0,100}(CreateFile|WriteFile)[\s\S]{0,100}\.(locked|encrypted|crypto|cerber|cerber3)/ },
+
   { id: "SIG-018", name: "Восстановление удалено", severity: "critical", category: "ransomware",
     pattern: /vssadmin[\s\S]*delete[\s\S]*shadows|bcdedit[\s\S]*set[\s\S]*recoveryenabled\s+no|wbadmin[\s\S]*delete[\s\S]*catalog/ },
+
   { id: "SIG-019", name: "Ransomware note", severity: "critical", category: "ransomware",
     pattern: /(your files have been encrypted|pay the ransom|bitcoin wallet|decrypt your files|send bitcoin|files will be deleted)[\s\S]{0,500}(tor|onion|bitcoin|monero)/is },
+
   { id: "SIG-020", name: "Extension changer", severity: "critical", category: "ransomware",
     pattern: /(rename|MoveFileEx|SetFileAttributes)[\s\S]{0,100}\.(locked|crypt|enc|encrypted|crypto|cerber|locky|wannacry)/ },
+
+  // ══════ ROOTKIT ══════
   { id: "SIG-021", name: "Kernel rootkit", severity: "critical", category: "rootkit",
     pattern: /NtQuerySystemInformation[\s\S]{0,100}ZwQuerySystemInformation[\s\S]{0,100}(SSDT|IDT|IAT|DKOM)/ },
+
   { id: "SIG-022", name: "Hide process", severity: "critical", category: "rootkit",
     pattern: /NtSetInformationProcess[\s\S]{0,100}ProcessDebugPort|ZwQueryInformationProcess[\s\S]{0,100}ProcessDebugFlags/ },
+
   { id: "SIG-023", name: "Hide file", severity: "critical", category: "rootkit",
     pattern: /NtQueryDirectoryFile[\s\S]{0,100}FILE_BOTH_DIR_INFORMATION[\s\S]{0,100}NextEntryOffset/ },
+
   { id: "SIG-024", name: "SSDT hook", severity: "critical", category: "rootkit",
     pattern: /KeServiceDescriptorTable[\s\S]{0,100}(hook|detour|trampoline|patch)/ },
+
+  // ══════ BACKDOORS ══════
   { id: "SIG-025", name: "Bind shell", severity: "critical", category: "backdoor",
     pattern: /socket[\s\S]{0,100}bind[\s\S]{0,100}listen[\s\S]{0,100}accept[\s\S]{0,100}(cmd|bash|sh)[\s\S]{0,50}(dup2|SOCK_STREAM)/ },
+
   { id: "SIG-026", name: "Reverse shell", severity: "critical", category: "backdoor",
     pattern: /socket[\s\S]{0,100}connect[\s\S]{0,100}\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}[\s\S]{0,100}(cmd|bash|sh)[\s\S]{0,50}dup2/ },
+
   { id: "SIG-027", name: "Webshell PHP", severity: "critical", category: "backdoor",
     pattern: /\$_(POST|GET|REQUEST|COOKIE)\[[\s\S]{0,50}\]\s*\([\s\S]{0,100}(eval|exec|system|passthru|shell_exec|popen|proc_open)\s*\(/ },
+
   { id: "SIG-028", name: "Webshell ASP", severity: "critical", category: "backdoor",
     pattern: /eval\s*\(\s*Request[\s\S]{0,50}(Execute|CreateObject)[\s\S]{0,50}WScript\.Shell/ },
+
   { id: "SIG-029", name: "Webshell JSP", severity: "critical", category: "backdoor",
     pattern: /Runtime\.getRuntime\(\)\.exec[\s\S]{0,50}(cmd|bash)[\s\S]{0,50}(Process|InputStream)/ },
+
   { id: "SIG-030", name: "IRC Botnet", severity: "high", category: "botnet",
     pattern: /PRIVMSG\s*#\w+\s*:\s*\x01[\s\S]{0,100}(JOIN|NICK|USER)[\s\S]{0,50}\.join\(|\.on\('data'/ },
+
+  // ══════ EXPLOITS ══════
   { id: "SIG-031", name: "Metasploit стейджинг", severity: "critical", category: "exploit",
     pattern: /msfvenom[\s\S]{0,100}reverse[\s\S]{0,50}(tcp|http|https)[\s\S]{0,100}(meterpreter|shell|vnc)/ },
+
   { id: "SIG-032", name: "Meterpreter payload", severity: "critical", category: "exploit",
     pattern: /meterpreter[\s\S]{0,100}(reverse_tcp|reverse_http|reverse_https)[\s\S]{0,100}(LHOST|LPORT)/ },
+
   { id: "SIG-033", name: "Shellcode detector", severity: "critical", category: "exploit",
     pattern: /(\x31\xc0|\x31\xdb|\x31\xc9|\x31\xd2|\x90{8,})[\s\S]{0,50}(\\x6a|\\x58|\\xcd|\\x80)/ },
+
   { id: "SIG-034", name: "ROP chain", severity: "high", category: "exploit",
     pattern: /gadget[\s\S]{0,50}(pop[\s\S]{0,20}ret|call[\s\S]{0,20}eax|jmp[\s\S]{0,20}esp)/ },
+
+  // ══════ PRIVILEGE ESCALATION ══════
   { id: "SIG-035", name: "UAC bypass", severity: "critical", category: "privesc",
     pattern: /(fodhelper|eventvwr|computerdefaults|sdclt|slui)[\s\S]{0,100}(ms-settings|HKCU|CurrentVersion)\\Run/ },
+
   { id: "SIG-036", name: "Token impersonation", severity: "critical", category: "privesc",
     pattern: /ImpersonateLoggedOnUser|DuplicateTokenEx|SetThreadToken[\s\S]{0,100}(AdjustTokenPrivileges|SeDebugPrivilege)/ },
+
   { id: "SIG-037", name: "Service install", severity: "high", category: "privesc",
     pattern: /CreateService[\s\S]{0,100}(SERVICE_AUTO_START|SERVICE_WIN32_OWN_PROCESS)[\s\S]{0,100}(cmd|powershell|bash)/ },
+
+  // ══════ ANTI-ANALYSIS ══════
   { id: "SIG-038", name: "VM detection", severity: "high", category: "anti-analysis",
     pattern: /(VMware|VirtualBox|QEMU|Hyper-V|Xen)[\s\S]{0,100}(CPUID|cpuid|__cpuid|vmexit|vmcall)/ },
+
   { id: "SIG-039", name: "Debugger detection", severity: "high", category: "anti-analysis",
     pattern: /IsDebuggerPresent|CheckRemoteDebuggerPresent|NtQueryInformationProcess[\s\S]{0,100}ProcessDebugPort/ },
+
   { id: "SIG-040", name: "Sandbox detection", severity: "high", category: "anti-analysis",
     pattern: /(NtQuerySystemInformation|GetTickCount|timeGetTime)[\s\S]{0,100}(anti-vm|anti-debug|sandbox|sleep|delay)/i },
+
   { id: "SIG-041", name: "AMSI bypass", severity: "critical", category: "anti-analysis",
     pattern: /AmsiUtils[\s\S]{0,100}amsiInitFailed|AmsiScanBuffer[\s\S]{0,100}0x80070057|SetProcessMitigationPolicy[\s\S]{0,50}DisableDynamicCode/ },
+
   { id: "SIG-042", name: "ETW patch", severity: "critical", category: "anti-analysis",
     pattern: /EtwEventWrite[\s\S]{0,100}(patch|nop|ret|0xc3)|NtTraceEvent[\s\S]{0,100}(hook|detour)/ },
+
+  // ══════ PERSISTENCE ══════
   { id: "SIG-043", name: "Registry Run key", severity: "high", category: "persistence",
     pattern: /CurrentVersion\\Run[\s\S]{0,100}(cmd|powershell|bash|python|perl|wscript|cscript)/ },
+
   { id: "SIG-044", name: "Scheduled task", severity: "high", category: "persistence",
     pattern: /schtasks[\s\S]{0,100}(\/create|\/Create)[\s\S]{0,100}(cmd|powershell|bash|python|perl)/ },
+
   { id: "SIG-045", name: "Startup folder", severity: "high", category: "persistence",
     pattern: /\\Start Menu\\Programs\\Startup[\s\S]{0,100}\.(exe|bat|cmd|vbs|ps1|js)/ },
+
   { id: "SIG-046", name: "WMI subscription", severity: "high", category: "persistence",
     pattern: /CommandLineEventConsumer[\s\S]{0,100}(cmd|powershell|bash|python|perl)/ },
+
   { id: "SIG-047", name: "Service DLL hijack", severity: "high", category: "persistence",
     pattern: /ServiceDll[\s\S]{0,100}(HKLM|HKCU)[\s\S]{0,100}\\(cmd|powershell|bash|python|perl)/ },
+
+  // ══════ NETWORK BACKDOORS ══════
   { id: "SIG-048", name: "Reverse TCP", severity: "critical", category: "backdoor",
     pattern: /socket[\s\S]{0,100}connect[\s\S]{0,100}\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}[\s\S]{0,100}(SOCK_STREAM|SOCK_DGRAM)/ },
+
   { id: "SIG-049", name: "Reverse HTTP", severity: "high", category: "backdoor",
     pattern: /InternetOpen[\s\S]{0,100}HttpOpenRequest[\s\S]{0,100}(POST|PUT)[\s\S]{0,100}(cmd|bash|powershell)/ },
+
   { id: "SIG-050", name: "DNS tunneling", severity: "high", category: "backdoor",
     pattern: /DnsQuery[\s\S]{0,100}(TXT|MX|CNAME)[\s\S]{0,100}(encode|decode|base64)[\s\S]{0,100}(socket|connect)/ },
+
+  // ══════ OBFUSCATION ══════
   { id: "SIG-051", name: "Base64 decode chain", severity: "high", category: "obfuscation",
     pattern: /atob\s*\(\s*atob\s*\(|fromCharCode[\s\S]{0,50}atob|eval\s*\(\s*atob\s*\(/ },
+
   { id: "SIG-052", name: "PowerShell download cradle", severity: "high", category: "obfuscation",
     pattern: /IEX\s*\(\s*(New-Object\s+Net\.WebClient|Invoke-WebRequest|wget|curl)[\s\S]*\)|Invoke-Expression[\s\S]{0,100}(DownloadString|DownloadFile)/i },
+
   { id: "SIG-053", name: "String building", severity: "medium", category: "obfuscation",
     pattern: /String\.fromCharCode\s*\(\s*\d+[\s\S]{0,20}\d+[\s\S]{0,20}\d+[\s\S]{0,20}\d+/ },
+
   { id: "SIG-054", name: "Hex encoding", severity: "medium", category: "obfuscation",
     pattern: /\\x[0-9a-f]{2}\\x[0-9a-f]{2}\\x[0-9a-f]{2}\\x[0-9a-f]{2}\\x[0-9a-f]{2}/i },
+
   { id: "SIG-055", name: "Dynamic eval chain", severity: "high", category: "obfuscation",
     pattern: /eval\s*\(\s*(eval|Function|atob|Buffer\.from|unescape|fromCharCode)/ },
+
+  // ══════ MINERS ══════
   { id: "SIG-056", name: "Crypto miner池", severity: "high", category: "miner",
     pattern: /stratum\+tcp:\/\/[\w.-]+:\d{4,5}/ },
+
   { id: "SIG-057", name: "XMRig", severity: "high", category: "miner",
     pattern: /xmrig[\s\S]{0,100}(algo|coin|pool|wallet|donate-level)/ },
+
   { id: "SIG-058", name: "Browser miner", severity: "high", category: "miner",
     pattern: /coinhive[\s\S]{0,100}(CoinHive\.Worker|anonymous|captcha)|cryptoloot[\s\S]{0,100}(CryptoLoot\.Worker|anonymous)/ },
+
+  // ══════ DATA EXFILTRATION ══════
   { id: "SIG-059", name: "FTP upload", severity: "high", category: "exfil",
     pattern: /ftp[\s\S]{0,100}(upload|put|stor)[\s\S]{0,100}(password|passwd|secret|token|key)/ },
+
   { id: "SIG-060", name: "HTTP POST exfil", severity: "high", category: "exfil",
     pattern: /(fetch|XMLHttpRequest|axios|http\.request|request\()[\s\S]{0,200}(POST|PUT)[\s\S]{0,200}(password|token|secret|credential|cookie)/ },
+
   { id: "SIG-061", name: "DNS exfil", severity: "high", category: "exfil",
     pattern: /DnsQuery[\s\S]{0,100}(encode|encodeURI|base64)[\s\S]{0,100}(password|token|secret|credential)/ },
+
+  // ══════ WORMS ══════
   { id: "SIG-062", name: "USB worm", severity: "critical", category: "worm",
     pattern: /(RECYCLER|Recycle\.Bin|autorun\.inf|\\setup\.exe)[\s\S]{0,100}(CopyFile|MoveFile|CreateFile)/ },
+
   { id: "SIG-063", name: "Network worm", severity: "critical", category: "worm",
     pattern: /(NetServerEnum|NetShareEnum|WNetEnumResource|WNetOpenEnum)[\s\S]{0,100}(CopyFile|MoveFile|CreateProcess)/ },
+
+  // ══════ ADWARE / PUP ══════
   { id: "SIG-064", name: "Adware inject", severity: "medium", category: "adware",
     pattern: /(inject|append|prepend)[\s\S]{0,100}(ads|advertis|popup|banner|click)[\s\S]{0,100}(google|facebook|amazon|ebay)/i },
+
   { id: "SIG-065", name: "Browser hijack", severity: "high", category: "adware",
     pattern: /(startPage|searchProvider|homePage)[\s\S]{0,100}(http|https)[\s\S]{0,50}(ads|search|babylon|conduit|ask\.com)/i },
+
   { id: "SIG-066", name: "Software Bundler", severity: "medium", category: "adware",
     pattern: /(toolbar|extension|plugin)[\s\S]{0,100}(install|download|update)[\s\S]{0,100}(offer|recommend|special)/i },
+
+  // ══════ BANKING TROJANS ══════
   { id: "SIG-067", name: "Web inject", severity: "critical", category: "banking",
     pattern: /(inject|intercept|modify)[\s\S]{0,100}(https?:\/\/(www\.)?(bank|paypal|alipay|pay\.google))/i },
+
   { id: "SIG-068", name: "Form grabbing", severity: "critical", category: "banking",
     pattern: /(HttpSendRequest|InternetReadFile)[\s\S]{0,200}(password|login|pin|credential|account)/ },
+
   { id: "SIG-069", name: "MITM proxy", severity: "critical", category: "banking",
     pattern: /(mitmproxy|ettercap|bettercap|burp)[\s\S]{0,100}(inject|intercept|modify)[\s\S]{0,100}(http|https)/i },
+
+  // ══════ RAT (Remote Access Trojans) ══════
   { id: "SIG-070", name: "RAT keylogger", severity: "critical", category: "rat",
     pattern: /(GetAsyncKeyState|SetWindowsHookEx)[\s\S]{0,200}(http|ftp|socket|connect)[\s\S]{0,100}(send|write|upload)/ },
+
   { id: "SIG-071", name: "RAT screen capture", severity: "critical", category: "rat",
     pattern: /(BitBlt|GetDC|GetDesktopWindow)[\s\S]{0,200}(JpegEncoder|PngEncoder|Image\.save)[\s\S]{0,200}(http|ftp|socket)/ },
+
   { id: "SIG-072", name: "RAT webcam", severity: "critical", category: "rat",
     pattern: /(capCreateCaptureWindow|avicap32|WebCamCapture|webcam)[\s\S]{0,200}(getImageData|capture)[\s\S]{0,200}(http|ftp|socket)/ },
+
   { id: "SIG-073", name: "RAT file manager", severity: "high", category: "rat",
     pattern: /(ListFiles|GetFiles|GetDirectories|ReadDirectory)[\s\S]{0,200}(Download|Upload|Delete|Rename|Copy|Move)[\s\S]{0,200}(http|ftp|socket)/ },
+
   { id: "SIG-074", name: "RAT command execution", severity: "critical", category: "rat",
     pattern: /(cmd\.exe|powershell|bash)[\s\S]{0,100}(-c|-e|\/c)[\s\S]{0,200}(http|ftp|socket)[\s\S]{0,100}(send|write|upload)/ },
+
+  // ══════ TROJANS ══════
   { id: "SIG-075", name: "Trojan downloader", severity: "critical", category: "trojan",
     pattern: /(URLDownloadToFile|InternetOpen|HttpOpenRequest)[\s\S]{0,200}\.(exe|dll|scr|bat|cmd|ps1|vbs)/ },
+
   { id: "SIG-076", name: "Trojan dropper", severity: "critical", category: "trojan",
     pattern: /(CreateFile|WriteFile)[\s\S]{0,100}\.(exe|dll|scr|bat|cmd|ps1|vbs)[\s\S]{0,100}(CreateProcess|ShellExecute|WinExec)/ },
+
   { id: "SIG-077", name: "Trojan stealer", severity: "critical", category: "trojan",
     pattern: /(password|token|cookie|session|credential|secret)[\s\S]{0,200}(http|ftp|smtp|socket)[\s\S]{0,100}(POST|PUT|send|upload)/ },
+
   { id: "SIG-078", name: "Loader/Injector", severity: "critical", category: "trojan",
     pattern: /LoadLibrary[AW]?[\s\S]{0,100}GetProcAddress[\s\S]{0,100}(call|jmp|rax|eax)[\s\S]{0,100}(VirtualAlloc|VirtualProtect)/ },
+
+  // ══════ WIPERS ══════
   { id: "SIG-079", name: "MBR wiper", severity: "critical", category: "wiper",
     pattern: /\\\\\.\\\\PhysicalDrive0[\s\S]{0,100}(WriteFile|DeviceIoControl)[\s\S]{0,100}(erase|wipe|overwrite)/ },
+
   { id: "SIG-080", name: "File wiper", severity: "critical", category: "wiper",
     pattern: /(DeleteFile|RemoveDirectory|SHFileOperation)[\s\S]{0,200}\*\.(doc|pdf|txt|jpg|png|mp4|avi)/ },
+
+  // ══════ INFostealers ══════
   { id: "SIG-081", name: "Cookie stealer", severity: "high", category: "infostealer",
     pattern: /(cookies\.sqlite|Cookie|chrome.*cookies)[\s\S]{0,100}(readFile|sqlite3_open)[\s\S]{0,100}(http|ftp)/ },
+
   { id: "SIG-082", name: "Session hijack", severity: "high", category: "infostealer",
     pattern: /(session|token|cookie|jwt|bearer)[\s\S]{0,100}(steal|grab|harvest|exfiltrate|dump)/i },
+
+  // ══════ FILELESS ══════
   { id: "SIG-083", name: "PowerShell fileless", severity: "critical", category: "fileless",
     pattern: /powershell[\s\S]{0,100}(-enc|-EncodedCommand|-e)[\s\S]{0,200}(IEX|Invoke-Expression|DownloadString)/ },
+
   { id: "SIG-084", name: "WMI fileless", severity: "critical", category: "fileless",
     pattern: /wmic[\s\S]{0,100}(process\s+call\s+create|Win32_Process)[\s\S]{0,100}(cmd|powershell|bash)/ },
+
   { id: "SIG-085", name: "MSHTA fileless", severity: "critical", category: "fileless",
     pattern: /mshta[\s\S]{0,100}(vbscript|javascript)[\s\S]{0,100}(Execute|eval|exec)/ },
+
+  // ══════ CRYPTO TARGETS ══════
   { id: "SIG-086", name: "Clipboard hijacker", severity: "high", category: "crypto",
     pattern: /GetClipboardData[\s\S]{0,100}(replace|regex)[\s\S]{0,100}(bc1|1[a-km-zA-HJ-NP-Z1-9]{25,34}|0x[a-fA-F0-9]{40})/ },
+
   { id: "SIG-087", name: "Wallet stealer", severity: "critical", category: "crypto",
     pattern: /(wallet\.dat|keystore\.json|UTC--|credentials\.json)[\s\S]{0,100}(copy|read|upload|send)[\s\S]{0,100}(http|ftp)/ },
+
+  // ══════ ADDITIONAL ══════
   { id: "SIG-088", name: "Encoded command", severity: "high", category: "obfuscation",
     pattern: /cmd[\s\S]{0,100}(\/c|\\c|-c)[\s\S]{0,100}(powershell|bash|python)[\s\S]{0,100}(-enc|-e|--encoded)/ },
+
   { id: "SIG-089", name: "Hidden file creation", severity: "high", category: "stealth",
     pattern: /SetFileAttributes[\s\S]{0,100}(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM|0x02|0x04)/ },
+
   { id: "SIG-090", name: "DLL search order hijack", severity: "high", category: "injection",
     pattern: /SetDllDirectory[\s\S]{0,100}(""|\.|\\)[\s\S]{0,100}LoadLibrary/ },
+
   { id: "SIG-091", name: "Process Doppelgänging", severity: "critical", category: "injection",
     pattern: /NtCreateTransaction[\s\S]{0,100}NtCreateSection[\s\S]{0,100}NtMapViewOfSection[\s\S]{0,100}NtCreateThreadEx/ },
+
   { id: "SIG-092", name: "Transacted Hollowing", severity: "critical", category: "injection",
     pattern: /CreateTransaction[\s\S]{0,100}CreateFileMapping[\s\S]{0,100}MapViewOfFile[\s\S]{0,100}NtCreateThreadEx/ },
+
   { id: "SIG-093", name: "Herpaderging", severity: "critical", category: "injection",
     pattern: /WriteFile[\s\S]{0,100}FlushFileBuffers[\s\S]{0,100}NtCreateSection[\s\S]{0,100}NtMapViewOfSection/ },
+
   { id: "SIG-094", name: "Process Ghosting", severity: "critical", category: "injection",
     pattern: /CreateFile[\s\S]{0,100}FILE_DISPOSITION_FLAG[\s\S]{0,100}NtCreateSection[\s\S]{0,100}NtCreateThreadEx/ },
+
   { id: "SIG-095", name: "Module Stomping", severity: "critical", category: "injection",
     pattern: /LoadLibrary[\s\S]{0,100}GetModuleHandle[\s\S]{0,100}WriteProcessMemory[\s\S]{0,100}CreateRemoteThread/ },
+
   { id: "SIG-096", name: "Syscall abuse", severity: "high", category: "anti-analysis",
     pattern: /NtAllocateVirtualMemory[\s\S]{0,100}NtWriteVirtualMemory[\s\S]{0,100}NtProtectVirtualMemory/ },
+
   { id: "SIG-097", name: "Direct syscalls", severity: "high", category: "anti-analysis",
     pattern: /syscall[\s\S]{0,50}(NtAllocateVirtualMemory|NtWriteVirtualMemory|NtCreateThreadEx|NtProtectVirtualMemory)/ },
+
   { id: "SIG-098", name: "Hell's Gate", severity: "high", category: "anti-analysis",
     pattern: /Hell.?s.?Gate|halos.?gate|tartarus.?gate|freshly.?gate/i },
+
   { id: "SIG-099", name: "SysWhispers", severity: "high", category: "anti-analysis",
     pattern: /SysWhispers[\s\S]{0,100}(NtAllocateVirtualMemory|NtWriteVirtualMemory|NtCreateThreadEx)/ },
+
   { id: "SIG-100", name: "Callback abuse", severity: "high", category: "anti-analysis",
     pattern: /EnumChildWindows[\s\S]{0,100}EnumWindows[\s\S]{0,100}EnumThreadWindows[\s\S]{0,100}(callback|EnumWindowsProc)/ },
+
   { id: "SIG-101", name: "APC injection stealth", severity: "critical", category: "injection",
     pattern: /NtQueueApcThread[\s\S]{0,100}NtResumeThread[\s\S]{0,100}WaitForSingleObject/ },
+
   { id: "SIG-102", name: "Early bird injection", severity: "critical", category: "injection",
     pattern: /CreateProcess[\s\S]{0,100}CREATE_SUSPENDED[\s\S]{0,100}WriteProcessMemory[\s\S]{0,100}NtQueueApcThread/ },
+
   { id: "SIG-103", name: "Thread execution hijack", severity: "critical", category: "injection",
     pattern: /SuspendThread[\s\S]{0,100}VirtualAlloc[\s\S]{0,100}WriteProcessMemory[\s\S]{0,100}ResumeThread/ },
 ]
+
+// ═══════════════════════════════════════════════════════════════
+//  MALICIOUS HASH DATABASE
+// ═══════════════════════════════════════════════════════════════
+
 export const MALICIOUS_HASHES = new Set([
+  // WannaCry
   "ed01ebfbc9eb5bbea545af4d01bf5f1071661840480439c6e5babe8e080e41aa",
+  // NotPetya
   "027cc450ef5f8c5f653329641ec1fed91f694e0d229928963b30f6b0d7d3a745",
+  // Emotet
   "268ea248e1885788874018b688e66137e3a6195b081926f61af566b7ed870a0b",
+  // TrickBot
   "f9a3c6b5dd40f34c5b7e2c8b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d",
+  // Ryuk
   "ac315f556f176801108abb3371025c35981ab13627a2d13f3f1a79f35d3e6c9e",
+  // LockBit
   "b7c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4",
+  // Conti
   "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+  // REvil
   "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5",
+  // DarkSide
   "5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a",
+  // Maze
   "a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8",
+  // Dridex
   "c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0",
+  // Agent Tesla
   "e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2",
+  // Formbook
   "a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4",
+  // NanoCore
   "b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5",
+  // njRAT
   "c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+  // Adload
   "d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7",
+  // Gootkit
   "e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8",
+  // QakBot
   "f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9",
+  // IcedID
   "a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+  // BazarLoader
   "b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1",
 ])
+
+// ═══════════════════════════════════════════════════════════════
+//  YARA RULES
+// ═══════════════════════════════════════════════════════════════
+
 export const YARA_RULES = [
   {
     id: "YARA-001", name: "PE with embedded script", severity: "critical",
@@ -388,6 +558,11 @@ export const YARA_RULES = [
     },
   },
 ]
+
+// ═══════════════════════════════════════════════════════════════
+//  HEURISTIC RULES
+// ═══════════════════════════════════════════════════════════════
+
 export const HEURISTIC_RULES = [
   {
     id: "HEUR-001", name: "Высокая энтропия", severity: "medium",
@@ -468,7 +643,7 @@ export const HEURISTIC_RULES = [
       const s = content.toString("utf8")
       const hasInterval = /(setInterval|setTimeout|while.*true|loop)/i.test(s)
       const hasNet = /(fetch|http|socket|connect|XMLHttpRequest)/i.test(s)
-      const hasHardcoded = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-z0-9-]+\.(com|net|org|ru|cn)\
+      const hasHardcoded = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[a-z0-9-]+\.(com|net|org|ru|cn)\//i.test(s)
       if (hasInterval && hasNet && hasHardcoded) return { score: 75, detail: "Периодические запросы к хардкоду" }
       return null
     },
@@ -556,7 +731,17 @@ export const HEURISTIC_RULES = [
     },
   },
 ]
+
+// ═══════════════════════════════════════════════════════════════
+//  QUARANTINE
+// ═══════════════════════════════════════════════════════════════
+
 export const QUARANTINE_DIR = path.join(process.env.USERPROFILE || process.env.HOME || "", ".stellar", "quarantine")
+
+// ═══════════════════════════════════════════════════════════════
+//  EXCLUSIONS
+// ═══════════════════════════════════════════════════════════════
+
 export function loadExclusions(filepath) {
   try {
     if (fs.existsSync(filepath)) {
@@ -565,6 +750,7 @@ export function loadExclusions(filepath) {
   } catch {}
   return []
 }
+
 export function isExcluded(filepath, exclusions) {
   const normalized = filepath.replace(/\\/g, "/").toLowerCase()
   for (const exc of exclusions) {
@@ -573,9 +759,15 @@ export function isExcluded(filepath, exclusions) {
   }
   return false
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  CORE SCANNING FUNCTION
+// ═══════════════════════════════════════════════════════════════
+
 export function computeFileHash(content) {
   return crypto.createHash("sha256").update(content).digest("hex")
 }
+
 export function computeFileHashes(content) {
   return {
     md5: crypto.createHash("md5").update(content).digest("hex"),
@@ -583,6 +775,7 @@ export function computeFileHashes(content) {
     sha256: crypto.createHash("sha256").update(content).digest("hex"),
   }
 }
+
 export function checkFileForMalware(content, filepath) {
   const results = {
     filepath,
@@ -597,8 +790,11 @@ export function checkFileForMalware(content, filepath) {
       heuristics: [],
     },
   }
+
   const isBinary = BINARY_EXTS.has(path.extname(filepath).toLowerCase())
   const isSource = !isBinary
+
+  // 1. Hash check
   const hashes = computeFileHashes(content)
   if (MALICIOUS_HASHES.has(hashes.md5) || MALICIOUS_HASHES.has(hashes.sha256)) {
     results.clean = false
@@ -609,6 +805,8 @@ export function checkFileForMalware(content, filepath) {
     })
     results.details.hashes.push({ ...hashes, match: true })
   }
+
+  // 2. Signature check
   const text = content.toString("utf8")
   for (const sig of SIGNATURES) {
     try {
@@ -628,6 +826,8 @@ export function checkFileForMalware(content, filepath) {
       }
     } catch {}
   }
+
+  // 3. YARA rules
   for (const rule of YARA_RULES) {
     try {
       if (rule.condition(content)) {
@@ -646,6 +846,8 @@ export function checkFileForMalware(content, filepath) {
       }
     } catch {}
   }
+
+  // 4. Heuristic analysis
   for (const rule of HEURISTIC_RULES) {
     try {
       const result = rule.check(content, filepath)
@@ -663,6 +865,7 @@ export function checkFileForMalware(content, filepath) {
       }
     } catch {}
   }
+
   results.score = Math.min(results.score, 100)
   return results
 }

@@ -3,14 +3,25 @@ import path from "node:path"
 import os from "node:os"
 import crypto from "node:crypto"
 import { execSync } from "node:child_process"
+
+// ═══════════════════════════════════════════════════════════════════
+// STELLA TELEGRAM BOT — удалённое управление + сессии + premium
+// ═══════════════════════════════════════════════════════════════════
+
 const BOT_TOKEN = "8923551485:AAFw4wG8ZwOtp5rzFsnguxhu4AH-2_ebSi0"
-const API_URL = `https:
+const API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`
 const PREMIUM_CODE = "10102013"
-const PREMIUM_DURATION = 30 * 24 * 60 * 60 * 1000 
+const PREMIUM_DURATION = 30 * 24 * 60 * 60 * 1000 // 30 дней
+
 const CONFIG_DIR = path.join(os.homedir(), ".stella")
 const BOT_CONFIG_PATH = path.join(CONFIG_DIR, "telegram-bot.json")
 const SESSIONS_PATH = path.join(CONFIG_DIR, "sessions.json")
 const AUTH_PATH = path.join(CONFIG_DIR, "telegram-auth.json")
+
+// ═══════════════════════════════════════════════════════════════════
+// 1. TELEGRAM API — прямые вызовы без зависимостей
+// ═══════════════════════════════════════════════════════════════════
+
 async function tg(method, body = {}) {
   try {
     const res = await fetch(`${API_URL}/${method}`, {
@@ -27,6 +38,7 @@ async function tg(method, body = {}) {
     return { ok: false, error: e.message }
   }
 }
+
 async function sendMessage(chatId, text, options = {}) {
   return tg("sendMessage", {
     chat_id: chatId,
@@ -35,6 +47,7 @@ async function sendMessage(chatId, text, options = {}) {
     ...options,
   })
 }
+
 async function editMessage(chatId, messageId, text, options = {}) {
   return tg("editMessageText", {
     chat_id: chatId,
@@ -44,9 +57,15 @@ async function editMessage(chatId, messageId, text, options = {}) {
     ...options,
   })
 }
+
 async function answerCallback(callbackQueryId, text = "") {
   return tg("answerCallbackQuery", { callback_query_id: callbackQueryId, text })
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 2. HARDWARE-BOUND AUTH — привязка к железу
+// ═══════════════════════════════════════════════════════════════════
+
 function getHardwareFingerprint() {
   const components = [
     os.hostname(),
@@ -55,6 +74,8 @@ function getHardwareFingerprint() {
     os.cpus()[0]?.model || "unknown",
     os.totalmem().toString(),
   ]
+
+  // Try to get MAC address
   try {
     const netInterfaces = os.networkInterfaces()
     for (const name of Object.keys(netInterfaces)) {
@@ -66,6 +87,8 @@ function getHardwareFingerprint() {
       }
     }
   } catch {}
+
+  // Try to get disk serial (using PowerShell instead of wmic)
   try {
     if (os.platform() === "win32") {
       const diskInfo = execSync('powershell -Command "Get-PhysicalDisk | Select-Object -ExpandProperty SerialNumber"', { encoding: "utf8", timeout: 5000 })
@@ -73,15 +96,25 @@ function getHardwareFingerprint() {
       if (serial && serial !== "") components.push(serial)
     }
   } catch {}
+
   return crypto.createHash("sha256").update(components.join("|")).digest("hex").slice(0, 32)
 }
+
 function generateAuthCode(telegramId) {
+  // Random 4-разрядный код для каждого пользователя
   const code = String(Math.floor(1000 + Math.random() * 9000))
   return code
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 10. ADMIN CODE — каждый Stella генерирует свой код на своём ПК
+// ═══════════════════════════════════════════════════════════════════
+
 export function generateAdminCode() {
   const code = String(Math.floor(1000 + Math.random() * 9000))
   const auth = loadAuth()
+
+  // Store admin code with hardware fingerprint of THIS computer
   auth.adminCode = {
     code,
     hardwareId: getHardwareFingerprint(),
@@ -90,19 +123,26 @@ export function generateAdminCode() {
     used: false,
   }
   saveAuth(auth)
+
   return code
 }
+
 export function verifyAdminCode(code, telegramId, username, firstName, chatId) {
   const auth = loadAuth()
+
   if (!auth.adminCode) {
     return { success: false, error: "Код не сгенерирован. Запустите /tg в Stella на вашем компьютере." }
   }
+
   if (auth.adminCode.used) {
     return { success: false, error: "Код уже использован. Сгенерируйте новый: /tg-code" }
   }
+
   if (auth.adminCode.code !== code) {
     return { success: false, error: "Неверный код." }
   }
+
+  // Link user to THIS computer
   auth.users[telegramId] = {
     username,
     firstName,
@@ -112,10 +152,14 @@ export function verifyAdminCode(code, telegramId, username, firstName, chatId) {
     authenticatedAt: Date.now(),
     role: "user",
   }
+
+  // Mark code as used
   auth.adminCode.used = true
   auth.adminCode.usedBy = telegramId
   auth.adminCode.usedAt = Date.now()
+
   saveAuth(auth)
+
   return {
     success: true,
     userId: telegramId,
@@ -124,6 +168,7 @@ export function verifyAdminCode(code, telegramId, username, firstName, chatId) {
     hostname: auth.adminCode.hostname,
   }
 }
+
 export function listAuthorizedUsers() {
   const auth = loadAuth()
   return Object.entries(auth.users).map(([id, u]) => ({
@@ -134,6 +179,7 @@ export function listAuthorizedUsers() {
     authenticatedAt: new Date(u.authenticatedAt).toLocaleString("ru-RU"),
   }))
 }
+
 function loadAuth() {
   try {
     return JSON.parse(fs.readFileSync(AUTH_PATH, "utf8"))
@@ -141,10 +187,16 @@ function loadAuth() {
     return { users: {}, pendingCodes: {} }
   }
 }
+
 function saveAuth(auth) {
   fs.mkdirSync(CONFIG_DIR, { recursive: true })
   fs.writeFileSync(AUTH_PATH, JSON.stringify(auth, null, 2))
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 3. SESSION TRACKER — отслеживание сессий
+// ═══════════════════════════════════════════════════════════════════
+
 function loadSessions() {
   try {
     return JSON.parse(fs.readFileSync(SESSIONS_PATH, "utf8"))
@@ -152,10 +204,12 @@ function loadSessions() {
     return { sessions: [], activeSession: null }
   }
 }
+
 function saveSessions(data) {
   fs.mkdirSync(CONFIG_DIR, { recursive: true })
   fs.writeFileSync(SESSIONS_PATH, JSON.stringify(data, null, 2))
 }
+
 function createSession(name, model = "MiMo V2.5 Free") {
   const data = loadSessions()
   const session = {
@@ -190,19 +244,27 @@ function createSession(name, model = "MiMo V2.5 Free") {
   saveSessions(data)
   return session
 }
+
 function updateSessionStats(sessionId, updates) {
   const data = loadSessions()
   const session = data.sessions.find(s => s.id === sessionId)
   if (!session) return null
+
   Object.assign(session.stats, updates)
   session.lastActivity = new Date().toISOString()
   saveSessions(data)
   return session
 }
+
 function getActiveSession() {
   const data = loadSessions()
   return data.sessions.find(s => s.id === data.activeSession) || null
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 4. PREMIUM SYSTEM — подписка
+// ═══════════════════════════════════════════════════════════════════
+
 function loadPremium() {
   try {
     return JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, "premium.json"), "utf8"))
@@ -210,16 +272,19 @@ function loadPremium() {
     return { users: {} }
   }
 }
+
 function savePremium(data) {
   fs.mkdirSync(CONFIG_DIR, { recursive: true })
   fs.writeFileSync(path.join(CONFIG_DIR, "premium.json"), JSON.stringify(data, null, 2))
 }
+
 function isPremium(telegramId) {
   const data = loadPremium()
   const user = data.users[telegramId]
   if (!user) return false
   return Date.now() < user.expiresAt
 }
+
 function activatePremium(telegramId, duration = PREMIUM_DURATION) {
   const data = loadPremium()
   data.users[telegramId] = {
@@ -228,18 +293,27 @@ function activatePremium(telegramId, duration = PREMIUM_DURATION) {
   }
   savePremium(data)
 }
+
 function getPremiumExpiry(telegramId) {
   const data = loadPremium()
   const user = data.users[telegramId]
   if (!user) return null
   return new Date(user.expiresAt).toLocaleDateString("ru-RU")
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 5. BOT HANDLERS — обработка команд
+// ═══════════════════════════════════════════════════════════════════
+
 const userStates = new Map()
+
 function getMainMenu(telegramId) {
   const premium = isPremium(telegramId)
   return {
     text: `<b>Stella Coder Bot</b>
+
 Добро пожаловать! ${premium ? "⭐ Premium" : ""}
+
 <b>Команды:</b>
 /start — Начать
 /sessions — Мои сессии
@@ -247,6 +321,7 @@ function getMainMenu(telegramId) {
 /status — Статус сессии
 /premium — Premium функции
 /help — Помощь
+
 <b>Удалённое управление:</b>
 Просто напишите команду, и Stella выполнит её на компьютере.
 Пример: "выключи телевизор", "сделай скриншот"`,
@@ -259,6 +334,7 @@ function getMainMenu(telegramId) {
     },
   }
 }
+
 function getSessionsList(telegramId) {
   const data = loadSessions()
   if (data.sessions.length === 0) {
@@ -269,12 +345,14 @@ function getSessionsList(telegramId) {
       },
     }
   }
+
   const lines = data.sessions.map((s, i) => {
     const isActive = s.id === data.activeSession
     const date = new Date(s.createdAt).toLocaleDateString("ru-RU")
     const msgs = s.stats.userMessages + s.stats.assistantMessages
     return `${isActive ? "🟢" : "⚪"} <b>${i + 1}. ${s.name}</b>\n    ${s.model} · ${msgs} сообщений · ${date}`
   })
+
   return {
     text: `<b>📋 Ваши сессии:</b>\n\n${lines.join("\n\n")}`,
     reply_markup: {
@@ -288,61 +366,83 @@ function getSessionsList(telegramId) {
     },
   }
 }
+
 function getSessionStats(session) {
   const stats = session.stats
   const ctxBreakdown = stats.contextBreakdown
   const totalCtx = ctxBreakdown.user + ctxBreakdown.assistant + ctxBreakdown.tools + ctxBreakdown.other
+
   const userPct = totalCtx > 0 ? ((ctxBreakdown.user / totalCtx) * 100).toFixed(1) : "0"
   const asstPct = totalCtx > 0 ? ((ctxBreakdown.assistant / totalCtx) * 100).toFixed(1) : "0"
   const toolsPct = totalCtx > 0 ? ((ctxBreakdown.tools / totalCtx) * 100).toFixed(1) : "0"
   const otherPct = totalCtx > 0 ? ((ctxBreakdown.other / totalCtx) * 100).toFixed(1) : "0"
+
   const usage = session.contextLimit ? Math.min(100, Math.round((stats.totalTokens / 200000) * 100)) : 0
+
   return `<b>📊 Сессия: ${session.name}</b>
+
 <b>Провайдер:</b> ${session.provider}
 <b>Лимит контекста:</b> ${session.contextLimit}
 <b>Использование:</b> ${usage}%
 <b>Модель:</b> ${session.model}
+
 <b>Статистика:</b>
 ├ Входные токены: ${stats.inputTokens.toLocaleString()}
 ├ Выходные токены: ${stats.outputTokens.toLocaleString()}
 ├ Токены кэша: ${stats.cacheRead.toLocaleString()}/${stats.cacheWrite.toLocaleString()}
 ├ Токены рассуждения: ${stats.reasoningTokens.toLocaleString()}
 └ Всего токенов: ${stats.totalTokens.toLocaleString()}
+
 <b>Сообщения:</b>
 ├ Пользователя: ${stats.userMessages}
 ├ Ассистента: ${stats.assistantMessages}
 ├ Всего: ${stats.userMessages + stats.assistantMessages}
 └ Вызовы инструментов: ${stats.toolCalls}
+
 <b>Разбивка контекста:</b>
 ├ 🟢 Пользователь ${userPct}%
 ├ 🟣 Ассистент ${asstPct}%
 ├ 🟤 Вызовы инструментов ${toolsPct}%
 └ ⚪ Другое ${otherPct}%
+
 <b>Стоимость:</b> $${stats.cost.toFixed(2)}
 <b>Создана:</b> ${new Date(session.createdAt).toLocaleString("ru-RU")}
 <b>Последняя активность:</b> ${new Date(session.lastActivity).toLocaleString("ru-RU")}`
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 6. WEBHOOK / POLLING — запуск бота
+// ═══════════════════════════════════════════════════════════════════
+
 let pollingOffset = 0
 let botRunning = false
+
 export async function startBot() {
   if (botRunning) {
     console.log("[TG Bot] Already running")
     return
   }
+
+  // Check bot token
   const me = await tg("getMe")
   if (!me.ok) {
     console.error("[TG Bot] Failed to start:", me.description || "Invalid token")
     return false
   }
+
   botRunning = true
   console.log(`[TG Bot] Started: @${me.result.username} (${me.result.first_name})`)
+
+  // Start polling
   pollUpdates()
   return true
 }
+
 export async function stopBot() {
   botRunning = false
   console.log("[TG Bot] Stopped")
 }
+
 async function pollUpdates() {
   while (botRunning) {
     try {
@@ -351,6 +451,7 @@ async function pollUpdates() {
         timeout: 30,
         allowed_updates: ["message", "callback_query"],
       })
+
       if (res.ok && res.result) {
         for (const update of res.result) {
           pollingOffset = update.update_id + 1
@@ -365,9 +466,11 @@ async function pollUpdates() {
     }
   }
 }
+
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms))
 }
+
 async function handleUpdate(update) {
   if (update.message) {
     await handleMessage(update.message)
@@ -375,20 +478,30 @@ async function handleUpdate(update) {
     await handleCallback(update.callback_query)
   }
 }
+
 async function handleMessage(msg) {
   const chatId = msg.chat.id
   const userId = msg.from?.id
   const text = msg.text || ""
+
+  // /start or /menu
   if (text === "/start" || text === "/menu") {
     const auth = loadAuth()
+
+    // Check if already authenticated
     if (auth.users[userId]) {
       await sendMessage(chatId, getMainMenu(userId).text, getMainMenu(userId))
       return
     }
+
+    // Not authenticated - check for admin code
     if (text === "/start") {
+      // Check if there's an active admin code
       if (auth.adminCode && !auth.adminCode.used) {
         await sendMessage(chatId, `<b>Добро пожаловать, ${msg.from.first_name}!</b>
+
 Для доступа к Stella введите код, который вам дали.
+
 <b>Введите код:</b>`, {
           reply_markup: {
             inline_keyboard: [[{ text: "◀️ Отмена", callback_data: "cancel_auth" }]],
@@ -397,10 +510,12 @@ async function handleMessage(msg) {
         userStates.set(userId, { awaiting: "admin_code" })
       } else {
         await sendMessage(chatId, `<b>Добро пожаловать, ${msg.from.first_name}!</b>
+
 Для получения доступа к Stella:
 1. Купите доступ у администратора
 2. Получите код
 3. Введите его здесь
+
 <b>Нет кода?</b> Свяжитесь с администратором.`, {
           reply_markup: {
             inline_keyboard: [[{ text: "◀️ Назад", callback_data: "main_menu" }]],
@@ -410,9 +525,12 @@ async function handleMessage(msg) {
     }
     return
   }
+
+  // Check user state for admin code input
   const userState = userStates.get(userId)
   if (userState?.awaiting === "admin_code") {
     userStates.delete(userId)
+
     const auth = loadAuth()
     const result = verifyAdminCode(
       text.trim(),
@@ -421,39 +539,55 @@ async function handleMessage(msg) {
       msg.from.first_name,
       chatId
     )
+
     if (result.success) {
       await sendMessage(chatId, `✅ <b>Доступ получен!</b>
+
 Добро пожаловать, ${result.firstName}!
+
 Теперь вы можете:
 • Управлять компьютером через Telegram
 • Получать уведомления
 • Просматривать сессии
+
 Нажмите /menu для главного меню.`, getMainMenu(userId))
     } else {
       await sendMessage(chatId, `❌ <b>${result.error}</b>
+
 Попробуйте ещё раз или нажмите /start.`)
     }
     return
   }
+
+  // Check if user is authenticated
   if (!auth.users[userId]) {
     await sendMessage(chatId, "❌ Вы не авторизованы. Нажмите /start для начала.")
     return
   }
+
+  // Authenticated user — process as Stella command
   const session = getActiveSession()
   if (session) {
+    // Update session stats
     updateSessionStats(session.id, {
       userMessages: session.stats.userMessages + 1,
       totalTokens: session.stats.totalTokens + Math.floor(text.length / 4),
       inputTokens: session.stats.inputTokens + Math.floor(text.length / 4),
     })
   }
+
+  // Send "processing" message
   const processingMsg = await sendMessage(chatId, `⚙️ <b>Выполняю:</b> ${text.slice(0, 100)}...`)
+
+  // Execute command via Stella
   try {
     const result = execSync(`node "${path.join(process.cwd(), "stella-cli", "index.mjs")}" -p "${text.replace(/"/g, '\\"')}"`, {
       encoding: "utf8",
       timeout: 120000,
       cwd: process.cwd(),
     })
+
+    // Update stats
     if (session) {
       updateSessionStats(session.id, {
         assistantMessages: session.stats.assistantMessages + 1,
@@ -461,20 +595,27 @@ async function handleMessage(msg) {
         totalTokens: session.stats.totalTokens + Math.floor(result.length / 4),
       })
     }
-    const output = result.trim().slice(0, 4000) 
+
+    // Send result
+    const output = result.trim().slice(0, 4000) // Telegram limit
     await editMessage(chatId, processingMsg.result.message_id, `<b>✅ Результат:</b>\n\n<pre>${escapeHtml(output)}</pre>`)
   } catch (e) {
     await editMessage(chatId, processingMsg.result.message_id, `<b>❌ Ошибка:</b>\n<pre>${escapeHtml(String(e.message).slice(0, 1000))}</pre>`)
   }
 }
+
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
+
 async function handleCallback(callback) {
   const chatId = callback.message.chat.id
   const userId = callback.from.id
   const data = callback.data
+
   await answerCallback(callback.id)
+
+  // Handle cancel_auth
   if (data === "cancel_auth") {
     const auth = loadAuth()
     delete auth.pendingCodes[userId]
@@ -482,18 +623,23 @@ async function handleCallback(callback) {
     await editMessage(chatId, callback.message.message_id, "❌ Авторизация отменена.\n\nНажмите /start для начала.")
     return
   }
+
+  // Check auth
   const auth = loadAuth()
   if (!auth.users[userId]) {
     await sendMessage(chatId, "❌ Нажмите /start для авторизации.")
     return
   }
+
   switch (data) {
     case "main_menu":
       await editMessage(chatId, callback.message.message_id, getMainMenu(userId).text, getMainMenu(userId))
       break
+
     case "sessions":
       await editMessage(chatId, callback.message.message_id, getSessionsList(userId).text, getSessionsList(userId))
       break
+
     case "new_session": {
       userStates.set(userId, { awaiting: "session_name" })
       await sendMessage(chatId, "📝 Введите название новой сессии:", {
@@ -501,6 +647,7 @@ async function handleCallback(callback) {
       })
       break
     }
+
     case "status": {
       const session = getActiveSession()
       if (!session) {
@@ -519,15 +666,18 @@ async function handleCallback(callback) {
       })
       break
     }
+
     case "premium": {
       const premium = isPremium(userId)
       const expiry = getPremiumExpiry(userId)
+
       let text = ""
       if (premium) {
         text = `<b>⭐ Premium активен</b>\n\nДействует до: ${expiry}\n\nДоступные функции:\n• Удалённое управление компьютером\n• Выполнение команд\n• Мониторинг сессий\n• Приоритетная поддержка`
       } else {
         text = `<b>⭐ Premium</b>\n\nФункции Premium стоят 50 звёзд Telegram.\n\nНо вы можете получить бесплатно, зная код!\n\nВведите код: <code>${PREMIUM_CODE}</code>\n(активация на 1 месяц)`
       }
+
       await sendMessage(chatId, text, {
         reply_markup: {
           inline_keyboard: premium
@@ -540,6 +690,7 @@ async function handleCallback(callback) {
       })
       break
     }
+
     case "activate_premium": {
       userStates.set(userId, { awaiting: "premium_code" })
       await sendMessage(chatId, "🔑 Введите код активации:", {
@@ -547,28 +698,35 @@ async function handleCallback(callback) {
       })
       break
     }
+
     case "help":
       await sendMessage(chatId, `<b>Помощь</b>
+
 <b>Команды:</b>
 /start — Меню
 /sessions — Мои сессии
 /new — Новая сессия
 /status — Статус сессии
 /premium — Premium функции
+
 <b>Удалённое управление:</b>
 Напишите любую команду, и Stella выполнит её на вашем компьютере.
+
 <b>Примеры:</b>
 • "выключи телевизор"
 • "сделай скриншот"
 • "открой браузер"
 • "покажи систему"
 • "обнови код"
+
 <b>Код активации Premium:</b>
 <code>${PREMIUM_CODE}</code> (1 месяц бесплатно)`, {
         reply_markup: { inline_keyboard: [[{ text: "◀️ Назад", callback_data: "main_menu" }]] },
       })
       break
+
     default:
+      // Handle session selection
       if (data.startsWith("session_")) {
         const idx = parseInt(data.replace("session_", ""))
         const sessions = loadSessions()
@@ -588,23 +746,36 @@ async function handleCallback(callback) {
       break
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 7. NOTIFICATIONS — уведомления о выполнении
+// ═══════════════════════════════════════════════════════════════════
+
 export async function notifyUser(telegramId, message) {
   const auth = loadAuth()
   if (!auth.users[telegramId]) return false
+
   return sendMessage(telegramId, `📬 <b>Уведомление:</b>\n\n${message}`)
 }
+
 export async function notifyAll(message) {
   const auth = loadAuth()
   for (const userId of Object.keys(auth.users)) {
     await sendMessage(auth.users[userId].chatId, `📬 <b>Уведомление:</b>\n\n${message}`)
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 8. PUBLIC API — экспорт для Stella CLI
+// ═══════════════════════════════════════════════════════════════════
+
 export const TELEGRAM_BRAIN_COMMANDS = {
   "/tg": "запустить Telegram бота",
   "/tg-stop": "остановить Telegram бота",
   "/tg-notify": "отправить уведомление всем",
   "/tg-sessions": "показать сессии в терминале",
 }
+
 export function getBotStatus() {
   return {
     running: botRunning,
@@ -614,10 +785,18 @@ export function getBotStatus() {
     premium: loadPremium(),
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 9. CLI AUTH VERIFICATION — проверка кода из терминала
+// ═══════════════════════════════════════════════════════════════════
+
 export function verifyAuthCode(code) {
   const auth = loadAuth()
+
+  // Find pending code that matches
   for (const [userId, pending] of Object.entries(auth.pendingCodes)) {
     if (pending.code === code) {
+      // Link the user
       auth.users[userId] = {
         username: pending.username,
         chatId: pending.chatId,
@@ -626,6 +805,7 @@ export function verifyAuthCode(code) {
       }
       delete auth.pendingCodes[userId]
       saveAuth(auth)
+
       return {
         success: true,
         userId,
@@ -634,8 +814,10 @@ export function verifyAuthCode(code) {
       }
     }
   }
+
   return { success: false, error: "Код не найден или уже использован" }
 }
+
 export function getPendingCodes() {
   const auth = loadAuth()
   return auth.pendingCodes

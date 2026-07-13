@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } fr
 import { join } from "path"
 import { homedir } from "os"
 import { execSync } from "child_process"
+
 const STELLA_DIR = join(homedir(), ".stella")
 const AUTO_DIR = join(STELLA_DIR, "autonomous")
 const MEMORY_FILE = join(AUTO_DIR, "memory.json")
@@ -9,27 +10,33 @@ const TASKS_FILE = join(AUTO_DIR, "tasks.json")
 const LOG_FILE = join(AUTO_DIR, "activity.log")
 const DASHBOARD_FILE = join(AUTO_DIR, "dashboard.html")
 const STATE_FILE = join(AUTO_DIR, "state.json")
+
 function ensureDir() {
   if (!existsSync(AUTO_DIR)) mkdirSync(AUTO_DIR, { recursive: true })
 }
+
 function loadJSON(file, fallback) {
   try { return JSON.parse(readFileSync(file, "utf-8")) } catch { return fallback }
 }
+
 function saveJSON(file, data) {
   ensureDir()
   writeFileSync(file, JSON.stringify(data, null, 2))
 }
+
 function logEntry(action, details) {
   ensureDir()
   const entry = `[${new Date().toISOString()}] ${action}: ${details}\n`
   appendFileSync(LOG_FILE, entry)
 }
+
 function shellRun(cmd) {
   try {
     execSync(cmd, { timeout: 60000, stdio: "pipe", shell: true })
     return true
   } catch { return false }
 }
+
 export class AutonomousAgent {
   constructor() {
     ensureDir()
@@ -37,11 +44,13 @@ export class AutonomousAgent {
     this.tasks = loadJSON(TASKS_FILE, { queue: [], completed: [], failed: [] })
     this.state = loadJSON(STATE_FILE, { running: false, startedAt: null, goal: "", pid: null, iterations: 0 })
   }
+
   save() {
     saveJSON(MEMORY_FILE, this.memory)
     saveJSON(TASKS_FILE, this.tasks)
     saveJSON(STATE_FILE, this.state)
   }
+
   planGoal(goal) {
     const plan = {
       id: Date.now().toString(36),
@@ -50,7 +59,9 @@ export class AutonomousAgent {
       steps: [],
       status: "planning"
     }
+
     const g = goal.toLowerCase()
+
     if (g.includes("видео") || g.includes("video")) {
       plan.steps = [
         { id: "concept", name: "Create video concept and script", status: "pending", subtasks: [
@@ -175,17 +186,21 @@ export class AutonomousAgent {
         ], results: [] }
       ]
     }
+
     this.tasks.queue.push(plan)
     this.state.goal = goal
     this.save()
     logEntry("PLAN_CREATED", goal)
     return plan
   }
+
   async executeSubtask(subtask, goal, apiCall) {
     const prompt = `You are an autonomous coding agent. Complete this task: "${subtask}"
 Context: Goal is "${goal}"
+
 You MUST return a JSON object with actual executable commands and file contents.
 DO NOT just describe — ACTUALLY PLAN THE EXECUTION.
+
 Return this exact JSON structure:
 {
   "action": "what will be done",
@@ -199,13 +214,16 @@ Return this exact JSON structure:
   "result": "description of what will happen",
   "nextSteps": ["what to do next"]
 }
+
 IMPORTANT:
 - filesToCreate must contain REAL, COMPLETE, WORKING code (not placeholders)
 - commandsToRun must be real shell commands (npm init, mkdir, etc.)
 - Return ONLY the JSON, no markdown, no explanations`
+
     const response = await apiCall(prompt)
     let parsed
     try {
+      // Strip markdown code fences if present
       let clean = response.trim()
       if (clean.startsWith("```")) {
         clean = clean.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "")
@@ -214,8 +232,11 @@ IMPORTANT:
     } catch {
       parsed = { action: "completed", result: response, filesToCreate: [], commandsToRun: [] }
     }
+
     const created = []
     const executed = []
+
+    // Create actual files
     if (parsed.filesToCreate && Array.isArray(parsed.filesToCreate)) {
       for (const file of parsed.filesToCreate) {
         if (file.path && file.content) {
@@ -233,6 +254,8 @@ IMPORTANT:
         }
       }
     }
+
+    // Execute actual commands
     if (parsed.commandsToRun && Array.isArray(parsed.commandsToRun)) {
       for (const cmd of parsed.commandsToRun) {
         try {
@@ -244,13 +267,16 @@ IMPORTANT:
         }
       }
     }
+
     logEntry("SUBTASK_DONE", `${subtask}: ${created.length} files, ${executed.length} cmds`)
     this.save()
     return { ...parsed, filesCreated: created, commandsRun: executed }
   }
+
   async runIteration(apiCall, onProgress) {
     const plan = this.tasks.queue.find(p => p.status !== "completed" && p.status !== "failed")
     if (!plan) return null
+
     plan.status = "running"
     const step = plan.steps.find(s => s.status === "pending")
     if (!step) {
@@ -260,17 +286,22 @@ IMPORTANT:
       logEntry("PLAN_DONE", `${plan.goal}: ${plan.status}`)
       return { type: "plan_done", plan }
     }
+
     step.status = "running"
     this.save()
     if (onProgress) onProgress(`⚡ Executing: ${step.name}`)
     logEntry("STEP_START", step.name)
+
     const stepResults = []
     let failed = false
+
     for (const subtask of step.subtasks) {
       try {
         if (onProgress) onProgress(`  → ${subtask}`)
         const result = await this.executeSubtask(subtask, plan.goal, apiCall)
         stepResults.push(result)
+        
+        // Report created files
         if (result.filesCreated && result.filesCreated.length > 0) {
           for (const f of result.filesCreated) {
             if (onProgress) onProgress(`  📄 Created: ${f}`)
@@ -287,23 +318,28 @@ IMPORTANT:
         failed = true
       }
     }
+
     step.status = failed ? "failed" : "completed"
     step.results = stepResults
     this.save()
     logEntry("STEP_DONE", `${step.name}: ${step.status}`)
     return { type: "step_done", step, plan }
   }
+
   async start(goal, apiCall, onProgress) {
     this.state.running = true
     this.state.startedAt = new Date().toISOString()
     this.state.goal = goal
     this.state.iterations = 0
     this.save()
+
     const plan = this.planGoal(goal)
     logEntry("AGENT_START", goal)
+
     while (this.state.running) {
       this.state.iterations++
       const result = await this.runIteration(apiCall, onProgress)
+
       if (!result) {
         this.state.running = false
         this.save()
@@ -311,21 +347,26 @@ IMPORTANT:
         if (onProgress) onProgress("ALL_DONE")
         break
       }
+
       if (result.type === "plan_done") {
         if (onProgress) onProgress(`Plan completed: ${result.plan.goal}`)
       } else if (result.type === "step_done") {
         if (onProgress) onProgress(`Step done: ${result.step.name}`)
       }
+
       await new Promise(r => setTimeout(r, 500))
     }
+
     this.state.running = false
     this.save()
   }
+
   stop() {
     this.state.running = false
     this.save()
     logEntry("AGENT_STOPPED", "Manually stopped")
   }
+
   getStatus() {
     const plan = this.tasks.queue.find(p => p.status === "running" || p.status === "planning")
     return {
@@ -350,12 +391,14 @@ IMPORTANT:
       accounts: this.memory.accounts.length
     }
   }
+
   generateDashboard() {
     const completedPlans = this.tasks.queue.filter(p => p.status === "completed")
     const failedPlans = this.tasks.queue.filter(p => p.status === "failed")
     const activePlans = this.tasks.queue.filter(p => p.status === "running" || p.status === "planning")
     const allFiles = [...new Set(this.memory.projects.map(p => p.file))]
     const logs = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf-8").split("\n").filter(Boolean).slice(-100) : []
+
     const html = `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -408,6 +451,7 @@ IMPORTANT:
       <span style="color:${this.state.running ? "#22c55e" : "#ef4444"};font-weight:bold">${this.state.running ? "RUNNING" : "IDLE"}</span>
     </div>
   </div>
+
   <div class="grid">
     <div class="card"><div class="num">${completedPlans.length}</div><div class="lbl">Plans Done</div></div>
     <div class="card"><div class="num">${activePlans.length}</div><div class="lbl">Active Plans</div></div>
@@ -418,6 +462,7 @@ IMPORTANT:
     <div class="card"><div class="num">${this.state.iterations}</div><div class="lbl">Iterations</div></div>
     <div class="card"><div class="num">${this.memory.videos.length}</div><div class="lbl">Videos</div></div>
   </div>
+
   ${activePlans.length > 0 ? `
   <div class="sec">
     <h2>⚡ Active Plans</h2>
@@ -435,6 +480,7 @@ IMPORTANT:
       </div>
     `).join("")}
   </div>` : ""}
+
   ${completedPlans.length > 0 ? `
   <div class="sec">
     <h2>✅ Completed Plans</h2>
@@ -451,6 +497,7 @@ IMPORTANT:
       </div>
     `).join("")}
   </div>` : ""}
+
   ${failedPlans.length > 0 ? `
   <div class="sec">
     <h2>❌ Failed Plans</h2>
@@ -466,6 +513,7 @@ IMPORTANT:
       </div>
     `).join("")}
   </div>` : ""}
+
   <div class="sec">
     <h2>📁 All Created Files</h2>
     ${allFiles.length > 0 ? `
@@ -474,6 +522,7 @@ IMPORTANT:
       </div>
     ` : '<div class="empty">No files created yet</div>'}
   </div>
+
   <div class="sec">
     <h2>📝 Activity Log (last 100 entries)</h2>
     <div class="log-box">
@@ -484,15 +533,18 @@ IMPORTANT:
       }).join("") : '<div>No activity yet</div>'}
     </div>
   </div>
+
   <div class="footer">
     <p>Stella Coder 5.1 — Autonomous Agent Dashboard</p>
     <p>Generated: ${new Date().toLocaleString()} · Goal: ${this.state.goal || "None"}</p>
   </div>
 </body>
 </html>`
+
     ensureDir()
     writeFileSync(DASHBOARD_FILE, html)
     return DASHBOARD_FILE
   }
 }
+
 export default AutonomousAgent

@@ -1,6 +1,7 @@
 import http from "http"
 import https from "https"
 import { JSDOM } from "jsdom"
+
 function fetchUrl(url, options = {}) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith("https") ? https : http
@@ -10,11 +11,14 @@ function fetchUrl(url, options = {}) {
       "Accept-Language": "en-US,en;q=0.5",
       ...options.headers,
     }
+
     const req = mod.get(url, { headers, timeout: 15000 }, (res) => {
+      // Follow redirects
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         const redirectUrl = new URL(res.headers.location, url).href
         return fetchUrl(redirectUrl, options).then(resolve).catch(reject)
       }
+
       let data = ""
       res.on("data", (chunk) => data += chunk)
       res.on("end", () => resolve({
@@ -28,17 +32,21 @@ function fetchUrl(url, options = {}) {
     req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")) })
   })
 }
+
 export class WebParser {
   constructor() {
     this.cache = new Map()
   }
+
   async fetchPage(url) {
     if (this.cache.has(url)) {
       return this.cache.get(url)
     }
+
     const result = await fetchUrl(url)
     const dom = new JSDOM(result.html)
     const doc = dom.window.document
+
     const parsed = {
       url,
       status: result.status,
@@ -70,25 +78,31 @@ export class WebParser {
       formsCount: doc.querySelectorAll("form").length,
       scriptsCount: doc.querySelectorAll("script").length,
     }
+
     this.cache.set(url, parsed)
     return parsed
   }
+
   async extractText(url) {
     const page = await this.fetchPage(url)
     return { success: true, title: page.title, text: page.text }
   }
+
   async extractLinks(url) {
     const page = await this.fetchPage(url)
     return { success: true, links: page.links }
   }
+
   async extractImages(url) {
     const page = await this.fetchPage(url)
     return { success: true, images: page.images }
   }
+
   async extractForms(url) {
     const page = await this.fetchPage(url)
     const dom = new JSDOM(page.html)
     const doc = dom.window.document
+
     const forms = Array.from(doc.querySelectorAll("form")).map(f => ({
       action: f.action,
       method: f.method?.toUpperCase() || "GET",
@@ -104,39 +118,49 @@ export class WebParser {
           : undefined,
       })),
     }))
+
     return { success: true, forms }
   }
+
   async search(query, engine = "duckduckgo") {
     if (engine === "duckduckgo") {
-      const url = `https:
+      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
       const page = await this.fetchPage(url)
       const dom = new JSDOM(page.html)
       const doc = dom.window.document
+
       const results = Array.from(doc.querySelectorAll(".result")).map(r => ({
         title: r.querySelector(".result__title")?.textContent?.trim() || "",
         url: r.querySelector(".result__url")?.textContent?.trim() || "",
         snippet: r.querySelector(".result__snippet")?.textContent?.trim() || "",
       })).slice(0, 10)
+
       return { success: true, results }
     }
+
     if (engine === "google") {
-      const url = `https:
+      const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`
       const page = await this.fetchPage(url)
       const dom = new JSDOM(page.html)
       const doc = dom.window.document
+
       const results = Array.from(doc.querySelectorAll("div.g,div[data-sokoban-container]")).map(r => ({
         title: r.querySelector("h3")?.textContent?.trim() || "",
         url: r.querySelector("a")?.href || "",
         snippet: r.querySelector(".VwiC3b,.st")?.textContent?.trim() || "",
       })).filter(r => r.title).slice(0, 10)
+
       return { success: true, results }
     }
+
     return { success: false, error: `Unknown engine: ${engine}` }
   }
+
   async getSEO(url) {
     const page = await this.fetchPage(url)
     const dom = new JSDOM(page.html)
     const doc = dom.window.document
+
     const seo = {
       title: page.title,
       titleLength: page.title.length,
@@ -153,24 +177,35 @@ export class WebParser {
       score: 0,
       issues: [],
     }
+
+    // Score
     if (seo.titleLength >= 30 && seo.titleLength <= 60) seo.score += 20
     else seo.issues.push(`Title length ${seo.titleLength} (optimal: 30-60)`)
+
     if (seo.metaDescLength >= 120 && seo.metaDescLength <= 160) seo.score += 20
     else seo.issues.push(`Meta description length ${seo.metaDescLength} (optimal: 120-160)`)
+
     if (seo.h1Count === 1) seo.score += 15
     else seo.issues.push(`H1 count: ${seo.h1Count} (should be 1)`)
+
     if (seo.hasCanonical) seo.score += 10
     else seo.issues.push("Missing canonical tag")
+
     if (seo.hasOgTitle) seo.score += 10
     else seo.issues.push("Missing og:title")
+
     if (seo.hasOgDescription) seo.score += 10
     else seo.issues.push("Missing og:description")
+
     if (seo.hasOgImage) seo.score += 5
     else seo.issues.push("Missing og:image")
+
     if (seo.imageAlts) seo.score += 10
     else seo.issues.push("Images without alt text")
+
     return { success: true, seo }
   }
+
   async batchFetch(urls) {
     const results = await Promise.allSettled(
       urls.map(url => this.fetchPage(url).then(p => ({
@@ -180,6 +215,7 @@ export class WebParser {
         textLength: p.text.length,
       })))
     )
+
     return {
       success: true,
       results: results.map((r, i) => ({
@@ -189,4 +225,5 @@ export class WebParser {
     }
   }
 }
+
 export default WebParser

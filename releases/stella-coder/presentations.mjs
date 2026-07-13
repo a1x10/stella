@@ -1,6 +1,9 @@
 import fs from "node:fs"
 import path from "node:path"
 import { execSync } from "node:child_process"
+
+// Stella Presentations — генератор красивых презентаций
+
 const PRESENTATION_THEMES = {
   modern: {
     name: "Modern Dark",
@@ -53,6 +56,7 @@ const PRESENTATION_THEMES = {
     accent: "#0ea5e9",
   },
 }
+
 const SLIDE_TEMPLATES = {
   title: (content, theme) => `
 <!DOCTYPE html>
@@ -61,7 +65,7 @@ const SLIDE_TEMPLATES = {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${content.title}</title>
-    <link href="https:
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -152,13 +156,14 @@ const SLIDE_TEMPLATES = {
     </div>
 </body>
 </html>`,
+
   content: (content, theme) => `
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https:
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -257,13 +262,14 @@ const SLIDE_TEMPLATES = {
     </div>
 </body>
 </html>`,
+
   twoColumn: (content, theme) => `
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https:
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -347,13 +353,14 @@ const SLIDE_TEMPLATES = {
     </div>
 </body>
 </html>`,
+
   quote: (content, theme) => `
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https:
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -411,13 +418,14 @@ const SLIDE_TEMPLATES = {
     </div>
 </body>
 </html>`,
+
   conclusion: (content, theme) => `
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https:
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -502,6 +510,7 @@ const SLIDE_TEMPLATES = {
 </body>
 </html>`,
 }
+
 export function generatePresentation(config) {
   const {
     title,
@@ -510,16 +519,23 @@ export function generatePresentation(config) {
     theme = "modern",
     outputDir = "presentation",
   } = config
+
   const selectedTheme = PRESENTATION_THEMES[theme] || PRESENTATION_THEMES.modern
   const output = path.resolve(process.cwd(), outputDir)
+
   fs.mkdirSync(output, { recursive: true })
+
   const htmlSlides = []
+
+  // Title slide
   htmlSlides.push(SLIDE_TEMPLATES.title({
     title,
     author,
     subtitle: slides[0]?.subtitle || '',
     date: new Date().toLocaleDateString('ru-RU'),
   }, selectedTheme))
+
+  // Content slides
   slides.forEach((slide, index) => {
     const template = SLIDE_TEMPLATES[slide.type] || SLIDE_TEMPLATES.content
     htmlSlides.push(template({
@@ -527,6 +543,8 @@ export function generatePresentation(config) {
       slideNumber: `${index + 1} / ${slides.length}`,
     }, selectedTheme))
   })
+
+  // Conclusion slide
   htmlSlides.push(SLIDE_TEMPLATES.conclusion({
     title: "Спасибо!",
     subtitle: "Вопросы?",
@@ -535,28 +553,46 @@ export function generatePresentation(config) {
       { text: "Узнать больше", primary: false },
     ],
   }, selectedTheme))
+
+  // Create index.html
   const indexHtml = createPresentationIndex(title, htmlSlides, selectedTheme)
   fs.writeFileSync(path.join(output, "index.html"), indexHtml)
+
+  // Create individual slide files
   htmlSlides.forEach((html, index) => {
     fs.writeFileSync(path.join(output, `slide-${String(index + 1).padStart(2, '0')}.html`), html)
   })
+
+  // Create README
   fs.writeFileSync(path.join(output, "README.md"), `# ${title}
+
 ## Презентация
+
 Эта презентация содержит ${htmlSlides.length} слайдов.
+
 ### Просмотр
+
 Откройте \`index.html\` в браузере для просмотра презентации.
+
 ### Навигация
+
 - Используйте клавиши ← → для навигации
 - Нажмите F11 для полноэкранного режима
+
 ### Тема
+
 ${selectedTheme.name}
+
 ### Цвета
+
 - Primary: ${selectedTheme.primary}
 - Secondary: ${selectedTheme.secondary}
 - Accent: ${selectedTheme.accent}
+
 ---
 Создано с помощью Stella Coder
 `)
+
   return {
     success: true,
     outputDir: output,
@@ -564,6 +600,7 @@ ${selectedTheme.name}
     theme: selectedTheme.name,
   }
 }
+
 function createPresentationIndex(title, slides, theme) {
   return `<!DOCTYPE html>
 <html lang="ru">
@@ -571,7 +608,7 @@ function createPresentationIndex(title, slides, theme) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
-    <link href="https:
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -741,6 +778,7 @@ function createPresentationIndex(title, slides, theme) {
             </div>`).join('')}
         </div>
     </div>
+
     <div class="controls">
         <button class="control-btn" onclick="prevSlide()" title="Предыдущий слайд">←</button>
         <button class="control-btn" onclick="nextSlide()" title="Следующий слайд">→</button>
@@ -748,32 +786,39 @@ function createPresentationIndex(title, slides, theme) {
         <button class="control-btn" onclick="toggleThumbnails()" title="Показать превью">📷</button>
         <button class="control-btn" onclick="toggleMinimap()" title="Мини-карта">🗺</button>
     </div>
+
     <div class="progress" id="progress"></div>
     <div class="slide-counter" id="slideCounter">1 / ${slides.length}</div>
     <div class="slide-number" id="slideNumber">1</div>
+
     <div class="slide-thumbnails" id="thumbnails">
         ${slides.map((slide, i) => `
         <div class="thumbnail ${i === 0 ? 'active' : ''}" onclick="goToSlide(${i + 1})">
             <iframe src="slide-${String(i + 1).padStart(2, '0')}.html" width="1280" height="720" frameborder="0"></iframe>
         </div>`).join('')}
     </div>
+
     <div class="minimap" id="minimap">
         ${slides.map((slide, i) => `
         <div class="minimap-dot ${i === 0 ? 'active' : ''}" onclick="goToSlide(${i + 1})" title="Слайд ${i + 1}"></div>`).join('')}
     </div>
+
     <script>
         let currentSlide = 1;
         const totalSlides = ${slides.length};
         let thumbnailsVisible = false;
         let minimapVisible = false;
+
         function showSlide(n, direction = 'next') {
             const currentEl = document.getElementById('slide' + currentSlide);
             const nextEl = document.getElementById('slide' + n);
+            
             if (currentEl) {
                 currentEl.classList.remove('active');
                 currentEl.classList.add('exit');
                 setTimeout(() => currentEl.classList.remove('exit'), 500);
             }
+            
             if (nextEl) {
                 nextEl.style.transform = direction === 'next' ? 'translateX(100px)' : 'translateX(-100px)';
                 setTimeout(() => {
@@ -781,35 +826,45 @@ function createPresentationIndex(title, slides, theme) {
                     nextEl.style.transform = '';
                 }, 50);
             }
+            
             currentSlide = n;
             updateUI();
         }
+
         function updateUI() {
             document.getElementById('slideCounter').textContent = currentSlide + ' / ' + totalSlides;
             document.getElementById('slideNumber').textContent = currentSlide;
             document.getElementById('progress').style.width = ((currentSlide / totalSlides) * 100) + '%';
+            
+            // Update thumbnails
             document.querySelectorAll('.thumbnail').forEach((t, i) => {
                 t.classList.toggle('active', i + 1 === currentSlide);
             });
+            
+            // Update minimap
             document.querySelectorAll('.minimap-dot').forEach((d, i) => {
                 d.classList.toggle('active', i + 1 === currentSlide);
             });
         }
+
         function nextSlide() {
             if (currentSlide < totalSlides) {
                 showSlide(currentSlide + 1, 'next');
             }
         }
+
         function prevSlide() {
             if (currentSlide > 1) {
                 showSlide(currentSlide - 1, 'prev');
             }
         }
+
         function goToSlide(n) {
             if (n >= 1 && n <= totalSlides) {
                 showSlide(n, n > currentSlide ? 'next' : 'prev');
             }
         }
+
         function toggleFullscreen() {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen();
@@ -817,14 +872,18 @@ function createPresentationIndex(title, slides, theme) {
                 document.exitFullscreen();
             }
         }
+
         function toggleThumbnails() {
             thumbnailsVisible = !thumbnailsVisible;
             document.getElementById('thumbnails').classList.toggle('visible', thumbnailsVisible);
         }
+
         function toggleMinimap() {
             minimapVisible = !minimapVisible;
             document.getElementById('minimap').style.display = minimapVisible ? 'flex' : 'none';
         }
+
+        // Keyboard navigation
         document.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
             if (e.key === 'ArrowLeft') prevSlide();
@@ -834,18 +893,24 @@ function createPresentationIndex(title, slides, theme) {
             if (e.key === 'Home') goToSlide(1);
             if (e.key === 'End') goToSlide(totalSlides);
         });
+
+        // Touch support
         let touchStartX = 0;
         document.addEventListener('touchstart', (e) => {
             touchStartX = e.touches[0].clientX;
         });
+
         document.addEventListener('touchend', (e) => {
             const touchEndX = e.changedTouches[0].clientX;
             const diff = touchStartX - touchEndX;
+            
             if (Math.abs(diff) > 50) {
                 if (diff > 0) nextSlide();
                 else prevSlide();
             }
         });
+
+        // Scale to fit
         function scalePresentation() {
             const container = document.getElementById('slideContainer');
             const scaleX = window.innerWidth / 1280;
@@ -853,19 +918,24 @@ function createPresentationIndex(title, slides, theme) {
             const scale = Math.min(scaleX, scaleY) * 0.9;
             container.style.transform = 'scale(' + scale + ')';
         }
+
         window.addEventListener('resize', scalePresentation);
         scalePresentation();
     </script>
 </body>
 </html>`
 }
+
 export function createPresentationFromTopic(topic, options = {}) {
   const {
     theme = "modern",
     slidesCount = 8,
     author = "",
   } = options
+
+  // Generate slide content based on topic
   const slides = generateSlideContent(topic, slidesCount)
+
   return generatePresentation({
     title: topic,
     author,
@@ -874,8 +944,11 @@ export function createPresentationFromTopic(topic, options = {}) {
     outputDir: `presentation-${topic.toLowerCase().replace(/\s+/g, '-')}`,
   })
 }
+
 function generateSlideContent(topic, count) {
   const slides = []
+
+  // Introduction slide
   slides.push({
     type: "content",
     title: "Введение",
@@ -886,6 +959,8 @@ function generateSlideContent(topic, count) {
       `Методы исследования`,
     ],
   })
+
+  // Main content slides
   const sections = [
     { title: "Основные понятия", items: ["Определения", "Классификация", "Примеры"] },
     { title: "Анализ", items: ["Сравнение", "Преимущества", "Недостатки"] },
@@ -893,6 +968,7 @@ function generateSlideContent(topic, count) {
     { title: "Технологии", items: ["Современные подходы", "Инструменты", "Решения"] },
     { title: "Результаты", items: ["Достижения", "Выводы", "Перспективы"] },
   ]
+
   for (let i = 0; i < Math.min(count - 3, sections.length); i++) {
     slides.push({
       type: "content",
@@ -900,11 +976,15 @@ function generateSlideContent(topic, count) {
       items: sections[i].items,
     })
   }
+
+  // Quote slide
   slides.push({
     type: "quote",
     quote: `${topic} — это ключ к успешному развитию в современном мире.`,
     author: "Исследователь",
   })
+
+  // Conclusion slide
   slides.push({
     type: "content",
     title: "Заключение",
@@ -915,41 +995,50 @@ function generateSlideContent(topic, count) {
       "Направления дальнейших исследований",
     ],
   })
+
   return slides
 }
+
 export const PRESENTATION_COMMANDS = {
   "/presentation": "создать презентацию из темы",
   "/presentation-theme": "выбрать тему оформления",
   "/presentation-list": "показать доступные темы",
 }
+
 export const AVAILABLE_THEMES = Object.entries(PRESENTATION_THEMES).map(([key, value]) => ({
   id: key,
   name: value.name,
   colors: { primary: value.primary, accent: value.accent },
 }))
+
 export function exportToPDF(presentationDir) {
   const indexPath = path.join(presentationDir, "index.html")
   if (!fs.existsSync(indexPath)) {
     throw new Error("Индексный файл не найден")
   }
+
+  // Create print-friendly version
   const printHtml = createPrintVersion(presentationDir)
   const printPath = path.join(presentationDir, "print.html")
   fs.writeFileSync(printPath, printHtml)
+
   return {
     success: true,
     printPath,
     message: "Версия для печати создана. Используйте Ctrl+P в браузере для экспорта в PDF.",
   }
 }
+
 function createPrintVersion(presentationDir) {
   const files = fs.readdirSync(presentationDir).filter(f => f.startsWith("slide-") && f.endsWith(".html"))
+  
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Версия для печати</title>
-    <link href="https:
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -997,14 +1086,19 @@ function createPrintVersion(presentationDir) {
 </body>
 </html>`
 }
+
 export function createSpeakerNotes(presentationDir, notes) {
   const notesPath = path.join(presentationDir, "speaker-notes.md")
+  
   let content = "# Заметки докладчика\n\n"
+  
   notes.forEach((note, i) => {
     content += `## Слайд ${i + 1}\n\n`
     content += `${note}\n\n`
   })
+  
   fs.writeFileSync(notesPath, content)
+  
   return {
     success: true,
     notesPath,

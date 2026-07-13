@@ -2,28 +2,35 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, unlink
 import { join } from "path"
 import { homedir } from "os"
 import { execSync } from "child_process"
+
 const STELLA_DIR = join(homedir(), ".stella")
 const MONITOR_DIR = join(STELLA_DIR, "monitor")
 const HISTORY_FILE = join(MONITOR_DIR, "history.json")
 const ALERTS_FILE = join(MONITOR_DIR, "alerts.json")
 const SCREENSHOTS_DIR = join(MONITOR_DIR, "screenshots")
 const MONITOR_STATE = join(MONITOR_DIR, "state.json")
+
 function ensureDir() {
   if (!existsSync(MONITOR_DIR)) mkdirSync(MONITOR_DIR, { recursive: true })
   if (!existsSync(SCREENSHOTS_DIR)) mkdirSync(SCREENSHOTS_DIR, { recursive: true })
 }
+
 function loadJSON(file, fallback) {
   try { return JSON.parse(readFileSync(file, "utf-8")) } catch { return fallback }
 }
+
 function saveJSON(file, data) {
   ensureDir()
   writeFileSync(file, JSON.stringify(data, null, 2))
 }
+
 function captureScreenSync() {
   const ts = Date.now()
   const outPath = join(SCREENSHOTS_DIR, `screen_${ts}.png`)
   const tempPath = join(SCREENSHOTS_DIR, `_temp.png`)
   const psScriptPath = join(SCREENSHOTS_DIR, `_capture.ps1`)
+
+  // Write PowerShell script to file (avoids escaping issues)
   const psScript = `
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -40,6 +47,7 @@ try {
   Write-Output "FAIL:$($_.Exception.Message)"
 }
 `.trim()
+
   try {
     writeFileSync(psScriptPath, psScript, "utf-8")
     const result = execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptPath}"`, {
@@ -47,6 +55,7 @@ try {
       timeout: 10000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim()
+
     if (result.startsWith("OK") && existsSync(tempPath)) {
       const data = readFileSync(tempPath)
       writeFileSync(outPath, data)
@@ -60,9 +69,11 @@ try {
     return null
   }
 }
+
 function compressImage(imagePath, maxWidth = 800) {
   const compressedPath = imagePath.replace(".png", "_small.png")
   const psScriptPath = join(SCREENSHOTS_DIR, `_compress.ps1`)
+
   const psScript = `
 Add-Type -AssemblyName System.Drawing
 try {
@@ -84,6 +95,7 @@ try {
   Write-Output "FAIL"
 }
 `.trim()
+
   try {
     writeFileSync(psScriptPath, psScript, "utf-8")
     execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptPath}"`, {
@@ -98,6 +110,7 @@ try {
   } catch {}
   return imagePath
 }
+
 export class ScreenMonitor {
   constructor() {
     ensureDir()
@@ -113,18 +126,23 @@ export class ScreenMonitor {
     this.alerts = loadJSON(ALERTS_FILE, [])
     this.intervalId = null
   }
+
   save() {
     saveJSON(MONITOR_STATE, this.state)
     saveJSON(HISTORY_FILE, this.history.slice(-500))
     saveJSON(ALERTS_FILE, this.alerts.slice(-200))
   }
+
   async captureAndAnalyze(visionFn) {
     const imagePath = captureScreenSync()
     if (!imagePath) {
       return { success: false, error: "Failed to capture screen" }
     }
+
     const stats = statSync(imagePath)
     const sizeKB = Math.round(stats.size / 1024)
+
+    // Compress for AI analysis
     const compressedPath = compressImage(imagePath, 600)
     let imageBase64
     try {
@@ -132,6 +150,7 @@ export class ScreenMonitor {
     } catch {
       imageBase64 = readFileSync(imagePath).toString("base64")
     }
+
     const ts = new Date().toISOString()
     const capture = {
       id: Date.now().toString(36),
@@ -141,18 +160,24 @@ export class ScreenMonitor {
       analysis: null,
       alerts: [],
     }
+
+    // Analyze with vision AI
     if (visionFn) {
       try {
         const analysis = await visionFn(imageBase64, this.getRecentContext())
         capture.analysis = analysis
+
+        // Detect alerts
         const alertKeywords = [
           "error", "crash", "exception", "fatal", "alert", "warning", "failed",
           "ошибка", "краш", "исключение", "фатальная", "предупреждение", "сбой",
           "not responding", "has stopped", "dead", "kill", "terminate",
           "не отвечает", "остановлен", "завершить",
         ]
+
         const textLower = (analysis.text || "").toLowerCase()
         const detected = alertKeywords.filter(k => textLower.includes(k))
+
         if (detected.length > 0) {
           const alert = {
             id: capture.id,
@@ -170,12 +195,17 @@ export class ScreenMonitor {
         capture.analysis = { error: err.message }
       }
     }
+
     this.history.push(capture)
     this.state.totalCaptures++
     this.save()
+
+    // Clean old screenshots (keep last 50)
     this.cleanOldScreenshots(50)
+
     return { success: true, capture }
   }
+
   getRecentContext() {
     const recent = this.history.slice(-5)
     return recent.map(h => ({
@@ -184,11 +214,13 @@ export class ScreenMonitor {
       alerts: h.alerts?.length || 0,
     }))
   }
+
   cleanOldScreenshots(keep = 50) {
     try {
       const files = readdirSync(SCREENSHOTS_DIR)
         .filter(f => f.startsWith("screen_") && f.endsWith(".png"))
         .sort()
+      
       if (files.length > keep) {
         const toDelete = files.slice(0, files.length - keep)
         for (const f of toDelete) {
@@ -197,15 +229,18 @@ export class ScreenMonitor {
       }
     } catch {}
   }
+
   start(intervalMs, visionFn) {
     if (this.state.running) {
       return { success: false, error: "Monitor already running" }
     }
+
     this.state.running = true
     this.state.startedAt = new Date().toISOString()
     this.state.interval = intervalMs || 2000
     this.state.pid = process.pid
     this.save()
+
     this.intervalId = setInterval(async () => {
       if (!this.state.running) {
         this.stop()
@@ -213,8 +248,10 @@ export class ScreenMonitor {
       }
       await this.captureAndAnalyze(visionFn)
     }, this.state.interval)
+
     return { success: true, interval: this.state.interval }
   }
+
   stop() {
     if (this.intervalId) {
       clearInterval(this.intervalId)
@@ -225,9 +262,11 @@ export class ScreenMonitor {
     this.save()
     return { success: true }
   }
+
   getStatus() {
     const recentAlerts = this.alerts.slice(-10)
     const recentCaptures = this.history.slice(-5)
+
     return {
       running: this.state.running,
       startedAt: this.state.startedAt,
@@ -244,42 +283,52 @@ export class ScreenMonitor {
       })),
     }
   }
+
   getAlerts(since) {
     if (since) {
       return this.alerts.filter(a => new Date(a.timestamp) > new Date(since))
     }
     return this.alerts
   }
+
   getScreenshotPath() {
     const files = readdirSync(SCREENSHOTS_DIR)
       .filter(f => f.startsWith("screen_") && f.endsWith(".png"))
       .sort()
     return files.length > 0 ? join(SCREENSHOTS_DIR, files[files.length - 1]) : null
   }
+
   generateReport() {
     const status = this.getStatus()
     const alertsByType = {}
     for (const a of this.alerts) {
       alertsByType[a.type] = (alertsByType[a.type] || 0) + 1
     }
+
     const report = `
 ═══════════════════════════════════════════
   👁️  SCREEN MONITOR REPORT
 ═══════════════════════════════════════════
+
 Status:       ${status.running ? "🟢 RUNNING" : "🔴 STOPPED"}
 Started:      ${status.startedAt ? new Date(status.startedAt).toLocaleString() : "Never"}
 Interval:     every ${status.interval / 1000}s
 Total captures: ${status.totalCaptures}
 Total alerts:   ${status.totalAlerts}
+
 ${Object.keys(alertsByType).length > 0 ? `
 Alert breakdown:
 ${Object.entries(alertsByType).map(([type, count]) => `  ⚠️  ${type}: ${count}`).join("\n")}
 ` : "No alerts detected."}
+
 Recent captures:
 ${status.recentCaptures.map(c => `  [${new Date(c.time).toLocaleTimeString()}] ${c.summary} ${c.alertCount > 0 ? `⚠️ ${c.alertCount} alerts` : "✅"}`).join("\n")}
+
 ═══════════════════════════════════════════
 `.trim()
+
     return report
   }
 }
+
 export default ScreenMonitor

@@ -4,14 +4,19 @@ import fs from "node:fs"
 import path from "node:path"
 import os from "node:os"
 import { execSync } from "node:child_process"
+
 const MAX_OUTPUT = 30000
+
 function clamp(s) {
   if (s.length > MAX_OUTPUT) return s.slice(0, MAX_OUTPUT) + `\n... [обрезано, всего ${s.length} символов]`
   return s
 }
+
 function resolveSafe(p) {
   return path.resolve(process.cwd(), p)
 }
+
+// permissions: { ask: async (kind, summary) => boolean }
 export function createTools(permissions) {
   return {
     read_file: tool({
@@ -30,6 +35,7 @@ export function createTools(permissions) {
         return { content: clamp(numbered), totalLines: lines.length }
       },
     }),
+
     write_file: tool({
       description: "Создать или перезаписать файл целиком.",
       inputSchema: z.object({
@@ -45,6 +51,7 @@ export function createTools(permissions) {
         return { success: true, path: p, lines: content.split("\n").length }
       },
     }),
+
     edit_file: tool({
       description:
         "Точечная замена в файле: заменяет old_string на new_string. old_string должен встречаться ровно один раз (или используй replace_all).",
@@ -68,6 +75,7 @@ export function createTools(permissions) {
         return { success: true, replacements: replace_all ? count : 1 }
       },
     }),
+
     list_dir: tool({
       description: "Показать содержимое директории.",
       inputSchema: z.object({ path: z.string().optional() }),
@@ -83,8 +91,20 @@ export function createTools(permissions) {
         }
       },
     }),
+
     glob: tool({
-      description: "Найти файлы по glob-шаблону, например **g, ".*")
+      description: "Найти файлы по glob-шаблону, например **/*.ts",
+      inputSchema: z.object({ pattern: z.string(), path: z.string().optional() }),
+      execute: async ({ pattern, path: p = "." }) => {
+        try {
+          const base = resolveSafe(p)
+          const SKIP = new Set(["node_modules", ".git", ".next", ".vercel"])
+          const rx = new RegExp(
+            "^" +
+              pattern
+                .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+                .replace(/\*\*\//g, "(.*/)?")
+                .replace(/\*\*/g, ".*")
                 .replace(/\*/g, "[^/]*")
                 .replace(/\?/g, ".") +
               "$",
@@ -113,6 +133,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     grep: tool({
       description: "Поиск по содержимому файлов (регулярное выражение).",
       inputSchema: z.object({
@@ -129,7 +150,7 @@ export function createTools(permissions) {
             ? new RegExp(
                 "^" +
                   g.replace(/[.+^${}()|[\]\\]/g, "\\$&")
-                    .replace(/\*\*\
+                    .replace(/\*\*\//g, "(.*/)?")
                     .replace(/\*\*/g, ".*")
                     .replace(/\*/g, "[^/]*")
                     .replace(/\?/g, ".") +
@@ -167,6 +188,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     bash: tool({
       description: "Выполнить shell-команду в рабочей директории. Возвращает stdout/stderr.",
       inputSchema: z.object({
@@ -193,6 +215,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     todo_write: tool({
       description: "Обновить список задач текущей сессии (план работы). Показывается пользователю.",
       inputSchema: z.object({
@@ -208,6 +231,10 @@ export function createTools(permissions) {
         return { success: true, count: todos.length }
       },
     }),
+
+    // ═══════════════════════════════════════════════════
+    //  ВЕБ И ИНТЕРНЕТ
+    // ═══════════════════════════════════════════════════
     web_search: tool({
       description: "Поиск в интернете по запросу (бесплатно, без API ключа).",
       inputSchema: z.object({
@@ -216,12 +243,15 @@ export function createTools(permissions) {
       }),
       execute: async ({ query, num_results = 5 }) => {
         try {
-          const res = await fetch(`https:
+          // Используем DuckDuckGo Instant Answers API (бесплатно, без ключа)
+          const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`, {
             signal: AbortSignal.timeout(10000),
             headers: { "User-Agent": "Stella/3.9" },
           })
+
           if (!res.ok) {
-            const htmlRes = await fetch(`https:
+            // Fallback: поиск через HTML
+            const htmlRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
               signal: AbortSignal.timeout(10000),
               headers: { "User-Agent": "Mozilla/5.0" },
             })
@@ -234,8 +264,10 @@ export function createTools(permissions) {
             }
             return { results, total: results.length }
           }
+
           const data = await res.json()
           const results = []
+
           if (data.AbstractText) {
             results.push({
               title: data.Heading || query,
@@ -243,6 +275,7 @@ export function createTools(permissions) {
               snippet: data.AbstractText,
             })
           }
+
           if (data.RelatedTopics) {
             for (const topic of data.RelatedTopics) {
               if (results.length >= num_results) break
@@ -255,12 +288,14 @@ export function createTools(permissions) {
               }
             }
           }
+
           return { results: results.slice(0, num_results), total: results.length }
         } catch (e) {
           return { error: `Ошибка поиска: ${e.message}` }
         }
       },
     }),
+
     web_fetch: tool({
       description: "Загрузить и прочитать содержимое URL. Возвращает текст страницы.",
       inputSchema: z.object({
@@ -282,6 +317,10 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ═══════════════════════════════════════════════════
+    //  ФАЙЛЫ И ДАННЫЕ
+    // ═══════════════════════════════════════════════════
     file_info: tool({
       description: "Получить информацию о файле: размер, тип, даты, права.",
       inputSchema: z.object({ path: z.string() }),
@@ -300,6 +339,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     file_hash: tool({
       description: "Вычислить хеш файла (SHA-256, MD5).",
       inputSchema: z.object({ path: z.string() }),
@@ -315,6 +355,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     file_copy: tool({
       description: "Скопировать файл из источника в назначение.",
       inputSchema: z.object({
@@ -330,6 +371,7 @@ export function createTools(permissions) {
         return { success: true, source, destination }
       },
     }),
+
     file_move: tool({
       description: "Переместить/переименовать файл.",
       inputSchema: z.object({
@@ -345,6 +387,7 @@ export function createTools(permissions) {
         return { success: true, source, destination }
       },
     }),
+
     file_delete: tool({
       description: "Удалить файл.",
       inputSchema: z.object({ path: z.string() }),
@@ -355,6 +398,7 @@ export function createTools(permissions) {
         return { success: true, deleted: p }
       },
     }),
+
     mkdir: tool({
       description: "Создать директорию (включая родительские).",
       inputSchema: z.object({ path: z.string() }),
@@ -364,6 +408,10 @@ export function createTools(permissions) {
         return { success: true, created: p }
       },
     }),
+
+    // ═══════════════════════════════════════════════════
+    //  GIT
+    // ═══════════════════════════════════════════════════
     git_status: tool({
       description: "Показать статус git репозитория.",
       inputSchema: z.object({}),
@@ -376,6 +424,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     git_diff: tool({
       description: "Показать различия git ( unstaged, staged, или конкретный коммит).",
       inputSchema: z.object({
@@ -391,6 +440,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     git_log: tool({
       description: "Показать историю коммитов.",
       inputSchema: z.object({
@@ -405,6 +455,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     git_commit: tool({
       description: "Создать git коммит с сообщением.",
       inputSchema: z.object({
@@ -425,6 +476,10 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ═══════════════════════════════════════════════════
+    //  ПАМЯТЬ И КОНТЕКСТ
+    // ═══════════════════════════════════════════════════
     memory_read: tool({
       description: "Прочитать память проекта (STELLA.md).",
       inputSchema: z.object({}),
@@ -434,6 +489,7 @@ export function createTools(permissions) {
         return { content: fs.readFileSync(memoryPath, "utf8") }
       },
     }),
+
     memory_write: tool({
       description: "Записать информацию в память проекта (STELLA.md).",
       inputSchema: z.object({
@@ -451,6 +507,10 @@ export function createTools(permissions) {
         return { success: true }
       },
     }),
+
+    // ═══════════════════════════════════════════════════
+    //  ЗАДАЧИ (TODO)
+    // ═══════════════════════════════════════════════════
     todo_read: tool({
       description: "Прочитать текущий список задач.",
       inputSchema: z.object({}),
@@ -464,6 +524,10 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ═══════════════════════════════════════════════════
+    //  ИНСТРУМЕНТЫ РАЗРАБОТЧИКА
+    // ═══════════════════════════════════════════════════
     package_json: tool({
       description: "Прочитать информацию из package.json проекта.",
       inputSchema: z.object({}),
@@ -481,6 +545,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     env_get: tool({
       description: "Получить значение переменной окружения.",
       inputSchema: z.object({
@@ -490,6 +555,7 @@ export function createTools(permissions) {
         return { name, value: process.env[name] || "(не задана)" }
       },
     }),
+
     env_set: tool({
       description: "Установить переменную окружения.",
       inputSchema: z.object({
@@ -501,6 +567,7 @@ export function createTools(permissions) {
         return { success: true, name, value }
       },
     }),
+
     process_list: tool({
       description: "Показать список запущенных процессов.",
       inputSchema: z.object({
@@ -517,6 +584,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     process_kill: tool({
       description: "Завершить процесс по PID или имени.",
       inputSchema: z.object({
@@ -533,6 +601,12 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ПОЛНОЕ УПРАВЛЕНИЕ КОМПЬЮТЕРОМ
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── ЗАПУСК ПРИЛОЖЕНИЙ ──
     open_app: tool({
       description: "Открыть приложение или файл. Поддерживает любые установленные приложения.",
       inputSchema: z.object({
@@ -594,6 +668,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     open_url: tool({
       description: "Открыть URL в браузере по умолчанию.",
       inputSchema: z.object({
@@ -608,6 +683,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     open_kinopoisk: tool({
       description: "Открыть Кинопоиск в браузере.",
       inputSchema: z.object({
@@ -616,8 +692,8 @@ export function createTools(permissions) {
       execute: async ({ query }) => {
         try {
           const url = query
-            ? `https:
-            : "https:
+            ? `https://www.kinopoisk.ru/index.php?what=${encodeURIComponent(query)}`
+            : "https://www.kinopoisk.ru"
           execSync(`start "" "${url}"`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: "cmd.exe" })
           return { success: true, url }
         } catch (e) {
@@ -625,6 +701,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     open_youtube: tool({
       description: "Открыть YouTube в браузере.",
       inputSchema: z.object({
@@ -633,8 +710,8 @@ export function createTools(permissions) {
       execute: async ({ query }) => {
         try {
           const url = query
-            ? `https:
-            : "https:
+            ? `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+            : "https://www.youtube.com"
           execSync(`start "" "${url}"`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: "cmd.exe" })
           return { success: true, url }
         } catch (e) {
@@ -642,6 +719,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     open_google: tool({
       description: "Открыть Google в браузере.",
       inputSchema: z.object({
@@ -650,8 +728,8 @@ export function createTools(permissions) {
       execute: async ({ query }) => {
         try {
           const url = query
-            ? `https:
-            : "https:
+            ? `https://www.google.com/search?q=${encodeURIComponent(query)}`
+            : "https://www.google.com"
           execSync(`start "" "${url}"`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], shell: "cmd.exe" })
           return { success: true, url }
         } catch (e) {
@@ -659,6 +737,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── УПРАВЛЕНИЕ ФАЙЛАМИ ──
     file_open: tool({
       description: "Открыть файл关联ным приложением.",
       inputSchema: z.object({ path: z.string().describe("Путь к файлу") }),
@@ -671,6 +751,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     file_explorer: tool({
       description: "Открыть папку в проводнике.",
       inputSchema: z.object({ path: z.string().describe("Путь к папке") }),
@@ -683,6 +764,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     file_create: tool({
       description: "Создать файл с содержимым.",
       inputSchema: z.object({
@@ -700,6 +782,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     file_rename: tool({
       description: "Переименовать файл или папку.",
       inputSchema: z.object({
@@ -715,6 +798,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── БУФЕР ОБМЕНА ──
     clipboard_get: tool({
       description: "Получить текст из буфера обмена.",
       inputSchema: z.object({}),
@@ -727,6 +812,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     clipboard_set: tool({
       description: "Скопировать текст в буфер обмена.",
       inputSchema: z.object({ text: z.string().describe("Текст для копирования") }),
@@ -739,6 +825,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── СКРИНШОТЫ ──
     screenshot: tool({
       description: "Сделать скриншот экрана и сохранить в файл.",
       inputSchema: z.object({
@@ -754,6 +842,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── НАСТРОЙКИ СИСТЕМЫ ──
     volume_set: tool({
       description: "Установить громкость (0-100).",
       inputSchema: z.object({
@@ -769,6 +859,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     volume_mute: tool({
       description: "Включить/выключить звук.",
       inputSchema: z.object({
@@ -783,6 +874,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     brightness_set: tool({
       description: "Установить яркость экрана (0-100).",
       inputSchema: z.object({
@@ -797,6 +889,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── УПРАВЛЕНИЕ ПРОЦЕССАМИ ──
     process_start: tool({
       description: "Запустить процесс.",
       inputSchema: z.object({
@@ -811,6 +905,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── СЕТЬ ──
     wifi_scan: tool({
       description: "Показать доступные Wi-Fi сети.",
       inputSchema: z.object({}),
@@ -823,6 +919,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     wifi_connect: tool({
       description: "Подключиться к Wi-Fi сети.",
       inputSchema: z.object({
@@ -842,6 +939,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── ПРОВЕРКА СИСТЕМЫ ──
     system_info: tool({
       description: "Получить полную информацию о системе.",
       inputSchema: z.object({}),
@@ -864,6 +963,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── ПЕРЕКЛЮЧЕНИЕ ОКОН ──
     window_list: tool({
       description: "Показать список открытых окон.",
       inputSchema: z.object({}),
@@ -876,6 +977,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     window_focus: tool({
       description: "Переключиться на окно приложения.",
       inputSchema: z.object({
@@ -890,6 +992,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── ВВОД ТЕКСТА ──
     type_text: tool({
       description: "Набрать текст на клавиатуре (имитация ввода).",
       inputSchema: z.object({
@@ -904,6 +1008,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     press_key: tool({
       description: "Нажать клавишу или комбинацию клавиш.",
       inputSchema: z.object({
@@ -918,6 +1023,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── УВЕДОМЛЕНИЯ ──
     notify: tool({
       description: "Показать уведомление Windows.",
       inputSchema: z.object({
@@ -933,6 +1040,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── СЛУЖЕБНЫЕ ──
     lock_screen: tool({
       description: "Заблокировать экран.",
       inputSchema: z.object({}),
@@ -945,6 +1054,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     shutdown: tool({
       description: "Выключить/перезагрузить компьютер.",
       inputSchema: z.object({
@@ -966,6 +1076,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     cancel_shutdown: tool({
       description: "Отменить запланированное выключение/перезагрузку.",
       inputSchema: z.object({}),
@@ -978,6 +1089,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── ПОИСК ──
     search_files: tool({
       description: "Быстрый поиск файлов по имени.",
       inputSchema: z.object({
@@ -994,6 +1107,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     search_text: tool({
       description: "Поиск текста в файлах (grep).",
       inputSchema: z.object({
@@ -1012,6 +1126,12 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ПОЛНОЕ УПРАВЛЕНИЕ СЕРВЕРОМ / ТЕРМИНАЛ
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── ТЕРМИНАЛ И КОМАНДЫ ──
     terminal_exec: tool({
       description: "Выполнить команду в терминале. Полный доступ к системе.",
       inputSchema: z.object({
@@ -1038,6 +1158,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     terminal_powershell: tool({
       description: "Выполнить PowerShell команду.",
       inputSchema: z.object({
@@ -1063,6 +1184,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     terminal_cmd: tool({
       description: "Выполнить cmd команду.",
       inputSchema: z.object({
@@ -1086,6 +1208,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── УПРАВЛЕНИЕ СЕРВЕРОМ ──
     server_status: tool({
       description: "Показать статус сервера: порты, соединения, ресурсы.",
       inputSchema: z.object({}),
@@ -1094,16 +1218,20 @@ export function createTools(permissions) {
           const netstat = execSync("netstat -ano", { encoding: "utf8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] })
           const connections = netstat.split("\n").filter(l => l.includes("ESTABLISHED")).length
           const listening = netstat.split("\n").filter(l => l.includes("LISTENING")).length
+
           const cpuUsage = execSync("wmic cpu get loadpercentage /value", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
           const cpuMatch = cpuUsage.match(/LoadPercentage=(\d+)/)
           const cpu = cpuMatch ? parseInt(cpuMatch[1]) : 0
+
           const memInfo = execSync("wmic OS get FreePhysicalMemory,TotalVisibleMemorySize /value", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
           const totalMemMatch = memInfo.match(/TotalVisibleMemorySize=(\d+)/)
           const freeMemMatch = memInfo.match(/FreePhysicalMemory=(\d+)/)
           const totalMem = totalMemMatch ? parseInt(totalMemMatch[1]) / 1024 / 1024 : 0
           const freeMem = freeMemMatch ? parseInt(freeMemMatch[1]) / 1024 / 1024 : 0
           const usedMem = totalMem - freeMem
+
           const uptime = execSync("systeminfo | findstr /C:\"System Boot Time\"", { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
+
           return {
             connections,
             listening,
@@ -1116,6 +1244,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     server_ports: tool({
       description: "Показать открытые порты и процессы.",
       inputSchema: z.object({}),
@@ -1129,6 +1258,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     server_connections: tool({
       description: "Показать активные соединения.",
       inputSchema: z.object({}),
@@ -1142,6 +1272,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     server_kill_port: tool({
       description: "Завершить процесс на порту.",
       inputSchema: z.object({
@@ -1152,8 +1283,10 @@ export function createTools(permissions) {
           const out = execSync(`netstat -ano | findstr :${port}`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
           const lines = out.split("\n").filter(l => l.includes("LISTENING"))
           if (lines.length === 0) return { error: `Порт ${port} не используется` }
+
           const pidMatch = lines[0].match(/(\d+)\s*$/)
           if (!pidMatch) return { error: "Не удалось определить PID" }
+
           const pid = pidMatch[1]
           execSync(`taskkill /F /PID ${pid}`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
           return { success: true, port, pid, killed: true }
@@ -1162,6 +1295,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── СЕТЬ ──
     network_interfaces: tool({
       description: "Показать сетевые интерфейсы.",
       inputSchema: z.object({}),
@@ -1174,6 +1309,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     network_dhcp: tool({
       description: "Показать/обновить DHCP настройки.",
       inputSchema: z.object({
@@ -1193,6 +1329,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     network_dns: tool({
       description: "Показать/изменить DNS серверы.",
       inputSchema: z.object({
@@ -1216,6 +1353,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     network_ping: tool({
       description: "Пинговать хост.",
       inputSchema: z.object({
@@ -1231,6 +1369,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     network_traceroute: tool({
       description: "Трассировка маршрута до хоста.",
       inputSchema: z.object({
@@ -1245,6 +1384,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     network_download: tool({
       description: "Скачать файл по URL.",
       inputSchema: z.object({
@@ -1261,6 +1401,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     network_upload: tool({
       description: "Загрузить файл на сервер.",
       inputSchema: z.object({
@@ -1277,6 +1418,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     network_http_server: tool({
       description: "Запустить HTTP сервер на указанном порту.",
       inputSchema: z.object({
@@ -1298,6 +1440,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── БАЗЫ ДАННЫХ ──
     db_mysql: tool({
       description: "Выполнить MySQL запрос.",
       inputSchema: z.object({
@@ -1322,6 +1466,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     db_postgres: tool({
       description: "Выполнить PostgreSQL запрос.",
       inputSchema: z.object({
@@ -1343,6 +1488,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     db_redis: tool({
       description: "Выполнить Redis команду.",
       inputSchema: z.object({
@@ -1363,13 +1509,14 @@ export function createTools(permissions) {
         }
       },
     }),
+
     db_mongo: tool({
       description: "Выполнить MongoDB запрос.",
       inputSchema: z.object({
         uri: z.string().optional().describe("URI подключения"),
         query: z.string().describe("MongoDB команда"),
       }),
-      execute: async ({ uri = "mongodb:
+      execute: async ({ uri = "mongodb://localhost:27017", query }) => {
         try {
           const out = execSync(`mongosh "${uri}" --eval "${query.replace(/"/g, '\\"')}"`, {
             encoding: "utf8",
@@ -1382,6 +1529,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── DOCKER ──
     docker_ps: tool({
       description: "Показать запущенные Docker контейнеры.",
       inputSchema: z.object({
@@ -1397,6 +1546,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     docker_run: tool({
       description: "Запустить Docker контейнер.",
       inputSchema: z.object({
@@ -1419,6 +1569,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     docker_stop: tool({
       description: "Остановить Docker контейнер.",
       inputSchema: z.object({
@@ -1433,6 +1584,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     docker_logs: tool({
       description: "Показать логи Docker контейнера.",
       inputSchema: z.object({
@@ -1448,6 +1600,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     docker_exec: tool({
       description: "Выполнить команду в контейнере.",
       inputSchema: z.object({
@@ -1463,6 +1616,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── PM2 / NODE.JS ──
     pm2_list: tool({
       description: "Показать PM2 процессы.",
       inputSchema: z.object({}),
@@ -1475,6 +1630,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     pm2_start: tool({
       description: "Запустить приложение через PM2.",
       inputSchema: z.object({
@@ -1492,6 +1648,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     pm2_stop: tool({
       description: "Остановить PM2 процесс.",
       inputSchema: z.object({
@@ -1506,6 +1663,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     pm2_logs: tool({
       description: "Показать логи PM2.",
       inputSchema: z.object({
@@ -1522,6 +1680,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── SYSTEMD / СЛУЖБЫ WINDOWS ──
     service_list: tool({
       description: "Показать запущенные службы Windows.",
       inputSchema: z.object({}),
@@ -1535,6 +1695,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     service_start: tool({
       description: "Запустить службу Windows.",
       inputSchema: z.object({
@@ -1549,6 +1710,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     service_stop: tool({
       description: "Остановить службу Windows.",
       inputSchema: z.object({
@@ -1563,6 +1725,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── РЕЕСТР ──
     registry_read: tool({
       description: "Прочитать значение из реестра Windows.",
       inputSchema: z.object({
@@ -1579,6 +1743,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     registry_write: tool({
       description: "Записать значение в реестр Windows.",
       inputSchema: z.object({
@@ -1596,6 +1761,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── СКРИПТЫ И АВТОМАТИЗАЦИЯ ──
     script_run: tool({
       description: "Запустить скрипт (.ps1, .bat, .cmd, .sh, .py, .js).",
       inputSchema: z.object({
@@ -1623,6 +1790,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     script_schedule: tool({
       description: "Запланировать выполнение скрипта по расписанию.",
       inputSchema: z.object({
@@ -1645,6 +1813,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     script_cron: tool({
       description: "Показать/добавить cron запись (Linux/WSL).",
       inputSchema: z.object({
@@ -1667,6 +1836,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── МОНИТОРИНГ ──
     monitor_cpu: tool({
       description: "Мониторинг CPU в реальном времени.",
       inputSchema: z.object({
@@ -1685,6 +1856,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     monitor_disk: tool({
       description: "Мониторинг дисковой активности.",
       inputSchema: z.object({}),
@@ -1697,6 +1869,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     monitor_network: tool({
       description: "Мониторинг сетевой активности.",
       inputSchema: z.object({}),
@@ -1709,6 +1882,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── БЕЗОПАСНОСТЬ СЕРВЕРА ──
     firewall_status: tool({
       description: "Показать статус файрвола.",
       inputSchema: z.object({}),
@@ -1721,6 +1896,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     firewall_block: tool({
       description: "Заблокировать порт в файрволе.",
       inputSchema: z.object({
@@ -1740,6 +1916,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     firewall_allow: tool({
       description: "Разрешить порт в файрволе.",
       inputSchema: z.object({
@@ -1759,6 +1936,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── SSH ──
     ssh_connect: tool({
       description: "Подключиться по SSH к серверу.",
       inputSchema: z.object({
@@ -1779,6 +1958,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     ssh_copy: tool({
       description: "Копировать файлы по SCP.",
       inputSchema: z.object({
@@ -1794,6 +1974,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── NPM / YARN / PNPM ──
     npm_scripts: tool({
       description: "Показать npm скрипты проекта.",
       inputSchema: z.object({}),
@@ -1808,6 +1990,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     npm_install: tool({
       description: "Установить npm зависимости.",
       inputSchema: z.object({
@@ -1828,6 +2011,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     npm_run: tool({
       description: "Запустить npm скрипт.",
       inputSchema: z.object({
@@ -1844,6 +2028,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── GIT SERVER ──
     git_remote_add: tool({
       description: "Добавить git remote.",
       inputSchema: z.object({
@@ -1859,6 +2045,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     git_push_force: tool({
       description: "Force push (опасно!).",
       inputSchema: z.object({
@@ -1873,6 +2060,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     git_clone_ssh: tool({
       description: "Клонировать по SSH.",
       inputSchema: z.object({
@@ -1889,6 +2077,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── ПОЛНЫЙ ДОСТУП К СИСТЕМЕ ──
     system_command: tool({
       description: "Выполнить ЛЮБУЮ системную команду. Полный доступ.",
       inputSchema: z.object({
@@ -1916,11 +2106,18 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ═══════════════════════════════════════════════════════════════
+    //  УМНЫЙ ДОМ — SONY TV, HDMI-CEC, SMART DEVICES
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── SONY BRAVIA TV ──
     sony_tv_discover: tool({
       description: "Найти Sony TV в локальной сети (SSDP/UPnP).",
       inputSchema: z.object({}),
       execute: async () => {
         try {
+          // SSDP M-SEARCH for Sony BRAVIA
           const dgram = await import("node:dgram")
           const socket = dgram.createSocket("udp4")
           const msg = [
@@ -1932,6 +2129,7 @@ export function createTools(permissions) {
             "",
             "",
           ].join("\r\n")
+
           return new Promise((resolve) => {
             const found = []
             socket.on("message", (buf, rinfo) => {
@@ -1951,6 +2149,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     sony_tv_command: tool({
       description: "Управление Sony BRAVIA TV через REST API. Включи/выключи/переключи канал/громкость.",
       inputSchema: z.object({
@@ -1961,6 +2160,7 @@ export function createTools(permissions) {
       }),
       execute: async ({ ip, command, value, psk }) => {
         try {
+          // Sony BRAVIA REST API
           const commands = {
             power: { method: "setPowerStatus", params: [{ status: false }] },
             power_on: { method: "setPowerStatus", params: [{ status: true }] },
@@ -1988,13 +2188,19 @@ export function createTools(permissions) {
             play: { method: "setPlayContent", params: [{ uri: "action:play" }] },
             stop: { method: "setPlayContent", params: [{ uri: "action:stop" }] },
           }
+
           const cmd = commands[command] || commands[command + "_on"]
           if (!cmd) return { error: `Неизвестная команда: ${command}` }
+
           const authHeader = psk ? { "X-Auth-PSK": psk } : {}
+          
+          // Power commands use /sony/system, others use /sony/videoControl
           const isPowerCommand = command === "power" || command === "power_on" || command === "power_off"
           const url = isPowerCommand 
-            ? `http:
-            : `http:
+            ? `http://${ip}/sony/system`
+            : `http://${ip}/sony/videoControl`
+
+          // Send the command
           const res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeader },
@@ -2006,16 +2212,20 @@ export function createTools(permissions) {
             }),
             signal: AbortSignal.timeout(5000),
           })
+
           const data = await res.json().catch(() => ({}))
+
           if (data.error && data.error.length > 0) {
             return { success: false, error: data.error, command }
           }
+
           return { success: true, command, response: data }
         } catch (e) {
           return { error: `Ошибка Sony TV: ${e.message}` }
         }
       },
     }),
+
     sony_tv_info: tool({
       description: "Получить информацию о Sony TV (модель, статус, источник).",
       inputSchema: z.object({
@@ -2025,7 +2235,9 @@ export function createTools(permissions) {
       execute: async ({ ip, psk }) => {
         try {
           const authHeader = psk ? { "X-Auth-PSK": psk } : {}
-          const url = `http:
+          const url = `http://${ip}/sony/videoControl`
+
+          // Get power status
           const powerRes = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeader },
@@ -2033,6 +2245,8 @@ export function createTools(permissions) {
             signal: AbortSignal.timeout(5000),
           })
           const power = await powerRes.json().catch(() => ({}))
+
+          // Get current content
           const contentRes = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeader },
@@ -2040,6 +2254,8 @@ export function createTools(permissions) {
             signal: AbortSignal.timeout(5000),
           })
           const content = await contentRes.json().catch(() => ({}))
+
+          // Get volume
           const volRes = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...authHeader },
@@ -2047,6 +2263,7 @@ export function createTools(permissions) {
             signal: AbortSignal.timeout(5000),
           })
           const volume = await volRes.json().catch(() => ({}))
+
           return {
             ip,
             power: power.result?.[0]?.status || "unknown",
@@ -2058,6 +2275,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── HDMI-CEC (любое устройство) ──
     hdmi_cec_send: tool({
       description: "Отправить HDMI-CEC команду (включить/выключить любое устройство с CEC).",
       inputSchema: z.object({
@@ -2066,16 +2285,20 @@ export function createTools(permissions) {
       }),
       execute: async ({ device = 0, command }) => {
         try {
+          // Try using cec-client or python-cec
           const cecCommands = {
             on: `echo "on ${device.toString(16).toUpperCase()}" | cec-client -s -d 1`,
             off: `echo "standby ${device.toString(16).toUpperCase()}" | cec-client -s -d 1`,
             standby: `echo "standby ${device.toString(16).toUpperCase()}" | cec-client -s -d 1`,
           }
+
           const cmd = cecCommands[command]
           if (!cmd) return { error: `CEC команда не поддерживается: ${command}` }
+
           execSync(cmd, { encoding: "utf8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] })
           return { success: true, command, device }
         } catch (e) {
+          // Fallback: try powershell WMI
           try {
             if (command === "on" || command === "off") {
               execSync(`powershell -command "Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorBasicDisplayParams"`, {
@@ -2090,6 +2313,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── SMART HOME ОБЩЕЕ ──
     smart_device_scan: tool({
       description: "Сканировать сеть на умные устройства (UPnP/SSDP).",
       inputSchema: z.object({}),
@@ -2105,6 +2330,7 @@ export function createTools(permissions) {
             "MX: 3",
             "", "",
           ].join("\r\n")
+
           return new Promise((resolve) => {
             const found = []
             const seen = new Set()
@@ -2131,6 +2357,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     smart_light_control: tool({
       description: "Управление умными лампами (Hue, Yeelight, TP-Link).",
       inputSchema: z.object({
@@ -2164,11 +2391,13 @@ export function createTools(permissions) {
             })
           }
           if (brand === "tplink") {
+            // TP-Link smart plug/bulb
             const cmd = {
               on: '{"system":{"set_relay_state":{"state":1}}}',
               off: '{"system":{"set_relay_state":{"state":0}}}',
             }
             const net = await import("node:net")
+            // TP-Link uses XOR encryption
             const encrypt = (data) => {
               let key = 171
               const buf = Buffer.alloc(data.length)
@@ -2202,6 +2431,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     smart_ac_control: tool({
       description: "Управление кондиционером (Broadlink IR).",
       inputSchema: z.object({
@@ -2217,6 +2447,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── CHROMECAST / AIRPLAY ──
     chromecast_cast: tool({
       description: "Транслировать на Chromecast.",
       inputSchema: z.object({
@@ -2225,6 +2457,7 @@ export function createTools(permissions) {
       }),
       execute: async ({ ip, url }) => {
         try {
+          // Use cast CLI or catt
           execSync(`catt cast "${url}" -d ${ip}`, { encoding: "utf8", timeout: 30000, stdio: "pipe" })
           return { success: true, url, device: ip }
         } catch (e) {
@@ -2232,6 +2465,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── WAKE ON LAN ──
     wake_on_lan: tool({
       description: "Включить устройство по Wake-on-LAN (MAC адрес).",
       inputSchema: z.object({
@@ -2257,6 +2492,12 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ═══════════════════════════════════════════════════════════════
+    //  УПРАВЛЕНИЕ ПРИЛОЖЕНИЯМИ (COM, UI AUTOMATION, VISION)
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── OFFICE: POWERPOINT ──
     ppt_create: tool({
       description: "Создать новую презентацию PowerPoint.",
       inputSchema: z.object({
@@ -2281,6 +2522,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     ppt_add_slide: tool({
       description: "Добавить слайд в презентацию PowerPoint.",
       inputSchema: z.object({
@@ -2310,6 +2552,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     ppt_export: tool({
       description: "Экспортировать презентацию в PDF.",
       inputSchema: z.object({
@@ -2335,6 +2578,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── OFFICE: WORD ──
     word_create: tool({
       description: "Создать новый документ Word.",
       inputSchema: z.object({
@@ -2361,6 +2606,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     word_read: tool({
       description: "Прочитать текст из документа Word.",
       inputSchema: z.object({
@@ -2386,6 +2632,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     word_format: tool({
       description: "Отформатировать документ Word (шрифт, размер, жирный).",
       inputSchema: z.object({
@@ -2417,6 +2664,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── OFFICE: EXCEL ──
     excel_create: tool({
       description: "Создать новую книгу Excel.",
       inputSchema: z.object({
@@ -2441,6 +2690,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     excel_write: tool({
       description: "Записать данные в ячейку Excel.",
       inputSchema: z.object({
@@ -2469,6 +2719,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     excel_read: tool({
       description: "Прочитать данные из ячейки Excel.",
       inputSchema: z.object({
@@ -2497,6 +2748,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     excel_chart: tool({
       description: "Создать диаграмму в Excel.",
       inputSchema: z.object({
@@ -2527,6 +2779,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── УПРАВЛЕНИЕ ЛЮБЫМИ ПРИЛОЖЕНИЯМИ ──
     app_focus: tool({
       description: "Переключиться на окно приложения.",
       inputSchema: z.object({
@@ -2553,6 +2807,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_type_text: tool({
       description: "Набрать текст в активном окне.",
       inputSchema: z.object({
@@ -2579,6 +2834,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_hotkey: tool({
       description: "Нажать комбинацию клавиш.",
       inputSchema: z.object({
@@ -2595,6 +2851,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_click: tool({
       description: "Кликнуть по координатам экрана.",
       inputSchema: z.object({
@@ -2627,6 +2884,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_move_mouse: tool({
       description: "Переместить курсор мыши.",
       inputSchema: z.object({
@@ -2644,6 +2902,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_screenshot: tool({
       description: "Сделать скриншот экрана и вернуть путь к файлу.",
       inputSchema: z.object({
@@ -2690,6 +2949,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_find_window: tool({
       description: "Найти окно по заголовку или классу.",
       inputSchema: z.object({
@@ -2715,6 +2975,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_list_windows: tool({
       description: "Показать все открытые окна.",
       inputSchema: z.object({}),
@@ -2734,6 +2995,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     app_close: tool({
       description: "Закрыть приложение.",
       inputSchema: z.object({
@@ -2748,6 +3010,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── ВИЗУАЛ (СКРИНШОТ + АНАЛИЗ) ──
     vision_analyze: tool({
       description: "Сделать скриншот и проанализировать что на экране.",
       inputSchema: z.object({
@@ -2774,6 +3038,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── NOTEPAD++ / БЛОКНОТ ──
     notepad_open: tool({
       description: "Открыть файл в Блокноте или Notepad++.",
       inputSchema: z.object({
@@ -2794,6 +3060,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── БРАУЗЕР АВТОМАТИЗАЦИЯ ──
     browser_open: tool({
       description: "Открыть URL в браузере.",
       inputSchema: z.object({
@@ -2810,6 +3078,7 @@ export function createTools(permissions) {
         }
       },
     }),
+
     browser_tabs: tool({
       description: "Показать вкладки браузера Chrome.",
       inputSchema: z.object({}),
@@ -2830,6 +3099,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── PAINT ──
     paint_draw: tool({
       description: "Открыть Paint и нарисовать/вставить изображение.",
       inputSchema: z.object({
@@ -2845,6 +3116,8 @@ export function createTools(permissions) {
         }
       },
     }),
+
+    // ── CALCULATOR ──
     calc: tool({
       description: "Вычислить математическое выражение.",
       inputSchema: z.object({
