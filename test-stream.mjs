@@ -7,7 +7,7 @@ const z = createOpenAICompatible({
   apiKey: "sk-U6RlsOyn7qmvEsYEQ0c4syqtCpff0GQXd2z8Wr9m5Px2tpxrtU7GiUvTRM4arfw8",
 });
 
-const m = z.chatModel("mimo-v2.5-free");
+const m = z.chatModel("deepseek-v4-flash-free");
 console.log("Starting...");
 
 const r = streamText({

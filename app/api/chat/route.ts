@@ -9,7 +9,7 @@ const zen = createOpenAICompatible({
 })
 
 export async function POST(req: NextRequest) {
-  const { messages, model = "mimo-v2.5-free" } = await req.json()
+  const { messages, model = "deepseek-v4-flash-free" } = await req.json()
 
   const result = streamText({
     model: zen.chatModel(model),

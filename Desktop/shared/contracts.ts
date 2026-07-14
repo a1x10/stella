@@ -6,7 +6,7 @@ export interface ModelOption {
 }
 
 export const MODELS: ModelOption[] = [
-  { id: "mimo-v2.5-free", label: "MiMo V2.5 — бесплатно" },
+  { id: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash (бесплатная)" },
   { id: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash — бесплатно" },
   { id: "gpt-5.4", label: "GPT-5.4" },
   { id: "gpt-5.4-mini", label: "GPT-5.4 Mini" },

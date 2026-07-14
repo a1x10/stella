@@ -16,7 +16,7 @@ import type {
 } from "./shared/contracts";
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_SETTINGS: DesktopSettings = { model: "mimo-v2.5-free", recentWorkspaces: [] };
+const DEFAULT_SETTINGS: DesktopSettings = { model: "deepseek-v4-flash-free", recentWorkspaces: [] };
 const MAX_HISTORY = 20;
 const MAX_OUTPUT_LENGTH = 12000;
 let mainWindow: BrowserWindow | null = null;

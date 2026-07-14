@@ -99,7 +99,7 @@ export async function runSubagent(name, task, options = {}) {
     })
 
     const result = await generateText({
-      model: zen.chatModel(model || "mimo-v2.5-free"),
+      model: zen.chatModel(model || "deepseek-v4-flash-free"),
       system: agent.systemPrompt,
       prompt: task,
       maxSteps: 20,

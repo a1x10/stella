@@ -27,7 +27,7 @@ const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
 const ZEN_BASE_URL = "https://opencode.ai/zen/v1"
 
 const MODELS = [
-  { id: "mimo-v2.5-free", label: "MiMo V2.5 (бесплатная)" },
+  { id: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash (бесплатная)" },
   { id: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash (бесплатная)" },
   { id: "gpt-5.4", label: "GPT 5.4 (OpenAI)" },
   { id: "gpt-5.4-mini", label: "GPT 5.4 Mini (OpenAI)" },
