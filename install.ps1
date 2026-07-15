@@ -1,15 +1,19 @@
-﻿# Stella Coder — установка в ОДНУ команду
+﻿# Stella Coder — установка в ОДНУ команду (модель Claude Code, без npm-реестра)
 # ------------------------------------------------------------
 # Покупателю достаточно вставить в PowerShell:
 #
 #   irm https://raw.githubusercontent.com/a1x10/stella/master/install.ps1 | iex
 #
-# После установки команда `stella` работает из ЛЮБОГО терминала
-# (PowerShell, CMD, Git Bash, Windows Terminal) без прав администратора.
+# Скачивается готовый бандл напрямую с GitHub (никакого `npm install`,
+# логина в npm и прав администратора не нужно). После установки команда
+# `stella` работает из ЛЮБОГО терминала: PowerShell, CMD, Git Bash, WT.
 # ------------------------------------------------------------
 
 $ErrorActionPreference = 'Stop'
-$NodeVer = 'v22.14.0'
+$NodeVer   = 'v22.14.0'
+$Base      = "$env:LOCALAPPDATA\StellaCoder"
+$BinDir    = "$Base\bin"
+$BundleUrl = 'https://raw.githubusercontent.com/a1x10/stella/master/dist/stella.mjs'
 
 # Добавить папку в постоянный User PATH + в текущую сессию
 function Add-UserPath([string]$dir) {
@@ -19,8 +23,7 @@ function Add-UserPath([string]$dir) {
     $parts = @()
     if ($cur) { $parts = $cur -split ';' | Where-Object { $_ -ne '' } }
     if ($parts -notcontains $dir) {
-        $new = (@($dir) + $parts) -join ';'
-        [Environment]::SetEnvironmentVariable('Path', $new, 'User')
+        [Environment]::SetEnvironmentVariable('Path', ((@($dir) + $parts) -join ';'), 'User')
     }
     if (($env:Path -split ';') -notcontains $dir) { $env:Path = "$dir;$env:Path" }
 }
@@ -34,64 +37,67 @@ Write-Host ''
 # [0] Разрешить запуск скриптов для текущего пользователя
 try { Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop } catch {}
 
-# [1] Node.js — используем системный, иначе ставим портативный в профиль
-$hasNode = [bool](Get-Command node -ErrorAction SilentlyContinue)
-$hasNpm  = [bool](Get-Command npm  -ErrorAction SilentlyContinue)
-if ($hasNode -and $hasNpm) {
-    Write-Host "  [1/4] Node.js найден: $(node -v)" -ForegroundColor Green
+New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
+
+# [1] Node.js — системный, иначе портативный в профиль
+$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+if ($nodeCmd) {
+    $NodeExe = $nodeCmd.Source
+    Write-Host "  [1/3] Node.js найден: $(node -v)" -ForegroundColor Green
 } else {
-    Write-Host '  [1/4] Node.js не найден — скачиваю портативную версию...' -ForegroundColor Yellow
-    $nodeDir  = "$env:LOCALAPPDATA\StellaNode"
-    $nodePath = "$nodeDir\node-$NodeVer-win-x64"
+    Write-Host '  [1/3] Node.js не найден — скачиваю портативную версию...' -ForegroundColor Yellow
+    $nodePath = "$Base\node\node-$NodeVer-win-x64"
     if (-not (Test-Path "$nodePath\node.exe")) {
         $zip = "$env:TEMP\stella-node.zip"
         Invoke-WebRequest -Uri "https://nodejs.org/dist/$NodeVer/node-$NodeVer-win-x64.zip" -OutFile $zip -UseBasicParsing
-        if (-not (Test-Path $nodeDir)) { New-Item -ItemType Directory -Path $nodeDir -Force | Out-Null }
-        Expand-Archive -Path $zip -DestinationPath $nodeDir -Force
+        New-Item -ItemType Directory -Path "$Base\node" -Force | Out-Null
+        Expand-Archive -Path $zip -DestinationPath "$Base\node" -Force
         Remove-Item $zip -Force -ErrorAction SilentlyContinue
         if (-not (Test-Path "$nodePath\node.exe")) { throw 'Не удалось распаковать Node.js' }
     }
+    $NodeExe = "$nodePath\node.exe"
     Add-UserPath $nodePath
     Write-Host "  [OK] Node.js установлен ($NodeVer)" -ForegroundColor Green
 }
 
-# [2] Ставим stella-coder глобально
-Write-Host '  [2/4] Устанавливаю stella-coder...' -ForegroundColor Yellow
-npm install -g stella-coder@latest --no-fund --no-audit
-if ($LASTEXITCODE -ne 0) { throw 'npm install -g stella-coder завершился с ошибкой' }
-Write-Host '  [OK] stella-coder установлен' -ForegroundColor Green
+# [2] Скачиваем бандл Stella напрямую с GitHub
+Write-Host '  [2/3] Скачиваю Stella Coder...' -ForegroundColor Yellow
+Invoke-WebRequest -Uri $BundleUrl -OutFile "$Base\stella.mjs" -UseBasicParsing
+if (-not (Test-Path "$Base\stella.mjs")) { throw 'Не удалось скачать stella.mjs' }
+Write-Host '  [OK] Stella Coder загружена' -ForegroundColor Green
 
-# [3] Привязываем команду `stella` ко ВСЕМ терминалам
-Write-Host '  [3/4] Привязываю команду stella ко всем терминалам...' -ForegroundColor Yellow
-$prefix = (npm config get prefix).Trim()
-Add-UserPath $prefix
-# Убираем .ps1-обёртку, чтобы PowerShell всегда брал stella.cmd (без проблем с политикой запуска)
-Remove-Item "$prefix\stella.ps1" -Force -ErrorAction SilentlyContinue
+# [3] Создаём команду `stella` для всех терминалов
+Write-Host '  [3/3] Привязываю команду stella ко всем терминалам...' -ForegroundColor Yellow
+
+# Шим для CMD и PowerShell (абсолютный путь к node — работает всегда)
+"@echo off`r`n`"$NodeExe`" `"%~dp0..\stella.mjs`" %*" |
+    Set-Content -Path "$BinDir\stella.cmd" -Encoding ASCII
+
+# Шим для Git Bash / MSYS
+"#!/bin/sh`nexec node `"`$(dirname `"`$0`")/../stella.mjs`" `"`$@`"" |
+    Set-Content -Path "$BinDir\stella" -Encoding ASCII -NoNewline
+
+Add-UserPath $BinDir
 
 # Ярлык на рабочий стол
 try {
     $desktop = [Environment]::GetFolderPath('Desktop')
-    $ws = New-Object -ComObject WScript.Shell
+    $ws  = New-Object -ComObject WScript.Shell
     $lnk = $ws.CreateShortcut("$desktop\Stella Coder.lnk")
-    $lnk.TargetPath   = 'cmd.exe'
-    $lnk.Arguments    = '/k stella'
-    $lnk.Description   = 'Stella Coder CLI'
+    $lnk.TargetPath = 'cmd.exe'
+    $lnk.Arguments  = '/k stella'
+    $lnk.Description = 'Stella Coder CLI'
     $lnk.Save()
 } catch {}
 
 Write-Host '  [OK] stella доступна из PowerShell, CMD, Git Bash и Windows Terminal' -ForegroundColor Green
 
-# [4] Готово
 Write-Host ''
-Write-Host '  [4/4] Готово! ✓' -ForegroundColor Green
+Write-Host '  Готово! ✓' -ForegroundColor Green
 Write-Host ''
 Write-Host '  Запуск:  ' -NoNewline; Write-Host 'stella' -ForegroundColor Cyan
 Write-Host '  (в уже открытых окнах — перезапустите терминал)' -ForegroundColor DarkGray
 Write-Host ''
 
 # Запускаем сразу
-try {
-    stella
-} catch {
-    Write-Host '  Откройте новый терминал и введите: stella' -ForegroundColor Yellow
-}
+try { & "$BinDir\stella.cmd" } catch { Write-Host '  Откройте новый терминал и введите: stella' -ForegroundColor Yellow }
