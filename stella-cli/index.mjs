@@ -371,6 +371,54 @@ function toolResultSummary(name, output) {
 }
 
 // ---------- agent turn ----------
+// сколько ждём первый токен, прежде чем считать стрим зависшим
+const STREAM_STALL_MS = 15000
+// потолок для запроса без стрима: там прогресса не видно, ждать вечно нечего
+const FALLBACK_MS = 180000
+
+function reportUsage(usage, t0) {
+  const inTok = usage?.inputTokens ?? 0
+  const outTok = usage?.outputTokens ?? 0
+  state.totalTokens.input += inTok
+  state.totalTokens.output += outTok
+  const cost = (inTok * PRICING.input + outTok * PRICING.output) / 1e6
+  state.totalCost += cost
+  const dur = ((Date.now() - t0) / 1000).toFixed(1)
+  console.log()
+  console.log(
+    dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ~$${cost.toFixed(4)} · ${blue(modelName(state.model))}`),
+  )
+}
+
+async function runWithoutStreaming(controller, t0) {
+  stopSpinner()
+  console.log(dim("  ⏳ Стрим молчит, добираю ответ целиком…"))
+  startSpinner()
+  const cap = AbortSignal.timeout(FALLBACK_MS)
+  let res
+  try {
+    res = await generateText({
+      model: getModel(state.model),
+      system: systemPrompt(),
+      messages: state.messages,
+      tools,
+      stopWhen: stepCountIs(30),
+      abortSignal: AbortSignal.any([controller.signal, cap]),
+    })
+  } catch (e) {
+    stopSpinner()
+    if (cap.aborted) {
+      console.log("\n" + red(`✗ Модель не ответила за ${FALLBACK_MS / 1000} с. Попробуй другую: /model`))
+      return
+    }
+    throw e
+  }
+  stopSpinner()
+  state.messages.push(...res.response.messages)
+  if (res.text) console.log("\n" + violet("⏺ ") + renderMarkdown(res.text))
+  reportUsage(res.usage, t0)
+}
+
 async function runTurn(userText) {
   if (!apiKey && !state.model.startsWith("ollama:")) {
     console.log(red("\n  ✗ API ключ не задан. Введи /login для настройки.\n"))
@@ -439,127 +487,102 @@ async function runTurn(userText) {
       }
       console.log("\n")
     } else {
-      // Try streaming first, fallback to generateText if no text in 10s
-      let gotText = false
-      const fallbackTimer = setTimeout(async () => {
-        if (!gotText) {
-          stopSpinner()
-          console.log(dim("  ⏳ Streaming stuck, using generateText fallback..."))
-          try {
-            const res = await generateText({
-              model: getModel(state.model),
-              system: systemPrompt(),
-              messages: state.messages,
-              tools,
-              maxSteps: 30,
-              abortSignal: controller.signal,
-            })
-            if (res.text) {
-              process.stdout.write("\n" + violet("⏺ ") + res.text + "\n")
-              state.messages.push({ role: "assistant", content: res.text })
-              for (const toolMsg of res.response.messages) {
-                if (toolMsg.role === "assistant") state.messages.push(toolMsg)
+      // Бесплатные модели иногда открывают стрим и молчат в него. Ждать бесконечно
+      // нельзя, поэтому рвём такой стрим и добираем ответ одним обычным запросом.
+      const streamAbort = new AbortController()
+      const abortStream = () => streamAbort.abort()
+      controller.signal.addEventListener("abort", abortStream)
+
+      let gotOutput = false
+      let stalled = false
+      const stallTimer = setTimeout(() => {
+        if (gotOutput) return
+        stalled = true
+        streamAbort.abort()
+      }, STREAM_STALL_MS)
+
+      try {
+        result = streamText({
+          model: getModel(state.model),
+          system: systemPrompt(),
+          messages: state.messages,
+          tools,
+          stopWhen: stepCountIs(30),
+          abortSignal: streamAbort.signal,
+          onError: (err) => {
+            if (stalled) return
+            stopSpinner()
+            console.log("\n" + red("✗ Ошибка API: ") + String(err?.message || err).slice(0, 500))
+            if (String(err?.message || "").match(/api key|unauthorized|401|credential/i)) {
+              console.log(dim("  Задай ключ: ") + purple("/login") + dim(" или сохрани в ~/.stella/config.json"))
+            }
+          },
+        })
+
+        const renderer = createStreamRenderer((s) => process.stdout.write(s))
+
+        for await (const part of result.fullStream) {
+          switch (part.type) {
+            case "text-delta": {
+              stopSpinner()
+              gotOutput = true
+              if (firstText) {
+                process.stdout.write("\n" + violet("⏺ ") )
+                firstText = false
               }
-              const usage = res.usage
-              const inTok = usage.promptTokens ?? 0
-              const outTok = usage.completionTokens ?? 0
-              state.totalTokens.input += inTok
-              state.totalTokens.output += outTok
-              const dur = ((Date.now() - t0) / 1000).toFixed(1)
-              console.log(dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ${blue(modelName(state.model))}`))
+              renderer.push(part.text)
+              break
             }
-          } catch (e2) {
-            console.log("\n" + red("✗ Ошибка fallback: ") + String(e2?.message || e2).slice(0, 300))
+            case "text-end": {
+              renderer.flush()
+              firstText = true
+              break
+            }
+            case "tool-call": {
+              stopSpinner()
+              gotOutput = true
+              renderer.flush()
+              console.log("\n" + purple("⏺ ") + bold(white(toolLabel(part.toolName, part.input))))
+              startSpinner("Выполняю")
+              break
+            }
+            case "tool-result": {
+              stopSpinner()
+              console.log(darkGray("  ⎿ ") + toolResultSummary(part.toolName, part.output))
+              startSpinner()
+              break
+            }
+            case "tool-error": {
+              stopSpinner()
+              console.log(darkGray("  ⎿ ") + red("ошибка инструмента"))
+              startSpinner()
+              break
+            }
+            case "error": {
+              stopSpinner()
+              renderer.flush()
+              console.log("\n" + red("✗ Ошибка: ") + String(part.error?.message || part.error).slice(0, 300))
+              break
+            }
+            case "finish": {
+              stopSpinner()
+              renderer.flush()
+              break
+            }
           }
         }
-      }, 10000)
 
-      result = streamText({
-        model: getModel(state.model),
-        system: systemPrompt(),
-        messages: state.messages,
-        tools,
-        stopWhen: stepCountIs(30),
-        abortSignal: controller.signal,
-        onError: (err) => {
-          stopSpinner()
-          console.log("\n" + red("✗ Ошибка API: ") + String(err?.message || err).slice(0, 500))
-          if (String(err?.message || "").match(/api key|unauthorized|401|credential/i)) {
-            console.log(dim("  Задай ключ: ") + purple("/login") + dim(" или сохрани в ~/.stella/config.json"))
-          }
-        },
-      })
-
-      const renderer = createStreamRenderer((s) => process.stdout.write(s))
-
-      for await (const part of result.fullStream) {
-        switch (part.type) {
-          case "text-delta": {
-            stopSpinner()
-            gotText = true
-            clearTimeout(fallbackTimer)
-            if (firstText) {
-              process.stdout.write("\n" + violet("⏺ ") )
-              firstText = false
-            }
-            renderer.push(part.text)
-            break
-          }
-          case "text-end": {
-            renderer.flush()
-            firstText = true
-            break
-          }
-          case "tool-call": {
-            stopSpinner()
-            renderer.flush()
-            console.log("\n" + purple("⏺ ") + bold(white(toolLabel(part.toolName, part.input))))
-            startSpinner("Выполняю")
-            break
-          }
-          case "tool-result": {
-            stopSpinner()
-            console.log(darkGray("  ⎿ ") + toolResultSummary(part.toolName, part.output))
-            startSpinner()
-            break
-          }
-          case "tool-error": {
-            stopSpinner()
-            console.log(darkGray("  ⎿ ") + red("ошибка инструмента"))
-            startSpinner()
-            break
-          }
-          case "error": {
-            stopSpinner()
-            renderer.flush()
-            console.log("\n" + red("✗ Ошибка: ") + String(part.error?.message || part.error).slice(0, 300))
-            break
-          }
-          case "finish": {
-            stopSpinner()
-            clearTimeout(fallbackTimer)
-            renderer.flush()
-            break
-          }
-        }
+        const response = await result.response
+        state.messages.push(...response.messages)
+        reportUsage(await result.usage, t0)
+      } catch (e) {
+        if (!stalled) throw e
+      } finally {
+        clearTimeout(stallTimer)
+        controller.signal.removeEventListener("abort", abortStream)
       }
 
-      const response = await result.response
-      state.messages.push(...response.messages)
-
-      const usage = await result.usage
-      const inTok = usage.inputTokens ?? 0
-      const outTok = usage.outputTokens ?? 0
-      state.totalTokens.input += inTok
-      state.totalTokens.output += outTok
-      const cost = (inTok * PRICING.input + outTok * PRICING.output) / 1e6
-      state.totalCost += cost
-
-      const dur = ((Date.now() - t0) / 1000).toFixed(1)
-      console.log()
-      console.log(
-        dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ~$${cost.toFixed(4)} · ${blue(modelName(state.model))}`),
-      )
+      if (stalled) await runWithoutStreaming(controller, t0)
     }
   } catch (e) {
     stopSpinner()

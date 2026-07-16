@@ -49146,6 +49146,49 @@ function toolResultSummary(name24, output) {
       return dim("\u0433\u043E\u0442\u043E\u0432\u043E");
   }
 }
+var STREAM_STALL_MS = 15e3;
+var FALLBACK_MS = 18e4;
+function reportUsage(usage, t0) {
+  const inTok = usage?.inputTokens ?? 0;
+  const outTok = usage?.outputTokens ?? 0;
+  state.totalTokens.input += inTok;
+  state.totalTokens.output += outTok;
+  const cost = (inTok * PRICING.input + outTok * PRICING.output) / 1e6;
+  state.totalCost += cost;
+  const dur = ((Date.now() - t0) / 1e3).toFixed(1);
+  console.log();
+  console.log(
+    dim("  ") + darkGray(`\u23F1 ${dur}s \xB7 \u2191${inTok} \u2193${outTok} \u0442\u043E\u043A \xB7 ~$${cost.toFixed(4)} \xB7 ${blue(modelName(state.model))}`)
+  );
+}
+async function runWithoutStreaming(controller, t0) {
+  stopSpinner();
+  console.log(dim("  \u23F3 \u0421\u0442\u0440\u0438\u043C \u043C\u043E\u043B\u0447\u0438\u0442, \u0434\u043E\u0431\u0438\u0440\u0430\u044E \u043E\u0442\u0432\u0435\u0442 \u0446\u0435\u043B\u0438\u043A\u043E\u043C\u2026"));
+  startSpinner();
+  const cap = AbortSignal.timeout(FALLBACK_MS);
+  let res;
+  try {
+    res = await generateText({
+      model: getModel(state.model),
+      system: systemPrompt(),
+      messages: state.messages,
+      tools,
+      stopWhen: isStepCount(30),
+      abortSignal: AbortSignal.any([controller.signal, cap])
+    });
+  } catch (e) {
+    stopSpinner();
+    if (cap.aborted) {
+      console.log("\n" + red(`\u2717 \u041C\u043E\u0434\u0435\u043B\u044C \u043D\u0435 \u043E\u0442\u0432\u0435\u0442\u0438\u043B\u0430 \u0437\u0430 ${FALLBACK_MS / 1e3} \u0441. \u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0434\u0440\u0443\u0433\u0443\u044E: /model`));
+      return;
+    }
+    throw e;
+  }
+  stopSpinner();
+  state.messages.push(...res.response.messages);
+  if (res.text) console.log("\n" + violet("\u23FA ") + renderMarkdown(res.text));
+  reportUsage(res.usage, t0);
+}
 async function runTurn(userText) {
   if (!apiKey && !state.model.startsWith("ollama:")) {
     console.log(red("\n  \u2717 API \u043A\u043B\u044E\u0447 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D. \u0412\u0432\u0435\u0434\u0438 /login \u0434\u043B\u044F \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.\n"));
@@ -49206,120 +49249,94 @@ async function runTurn(userText) {
       }
       console.log("\n");
     } else {
-      let gotText = false;
-      const fallbackTimer = setTimeout(async () => {
-        if (!gotText) {
-          stopSpinner();
-          console.log(dim("  \u23F3 Streaming stuck, using generateText fallback..."));
-          try {
-            const res = await generateText({
-              model: getModel(state.model),
-              system: systemPrompt(),
-              messages: state.messages,
-              tools,
-              maxSteps: 30,
-              abortSignal: controller.signal
-            });
-            if (res.text) {
-              process.stdout.write("\n" + violet("\u23FA ") + res.text + "\n");
-              state.messages.push({ role: "assistant", content: res.text });
-              for (const toolMsg of res.response.messages) {
-                if (toolMsg.role === "assistant") state.messages.push(toolMsg);
+      const streamAbort = new AbortController();
+      const abortStream = () => streamAbort.abort();
+      controller.signal.addEventListener("abort", abortStream);
+      let gotOutput = false;
+      let stalled = false;
+      const stallTimer = setTimeout(() => {
+        if (gotOutput) return;
+        stalled = true;
+        streamAbort.abort();
+      }, STREAM_STALL_MS);
+      try {
+        result = streamText({
+          model: getModel(state.model),
+          system: systemPrompt(),
+          messages: state.messages,
+          tools,
+          stopWhen: isStepCount(30),
+          abortSignal: streamAbort.signal,
+          onError: (err) => {
+            if (stalled) return;
+            stopSpinner();
+            console.log("\n" + red("\u2717 \u041E\u0448\u0438\u0431\u043A\u0430 API: ") + String(err?.message || err).slice(0, 500));
+            if (String(err?.message || "").match(/api key|unauthorized|401|credential/i)) {
+              console.log(dim("  \u0417\u0430\u0434\u0430\u0439 \u043A\u043B\u044E\u0447: ") + purple("/login") + dim(" \u0438\u043B\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0438 \u0432 ~/.stella/config.json"));
+            }
+          }
+        });
+        const renderer = createStreamRenderer((s) => process.stdout.write(s));
+        for await (const part of result.fullStream) {
+          switch (part.type) {
+            case "text-delta": {
+              stopSpinner();
+              gotOutput = true;
+              if (firstText) {
+                process.stdout.write("\n" + violet("\u23FA "));
+                firstText = false;
               }
-              const usage2 = res.usage;
-              const inTok2 = usage2.promptTokens ?? 0;
-              const outTok2 = usage2.completionTokens ?? 0;
-              state.totalTokens.input += inTok2;
-              state.totalTokens.output += outTok2;
-              const dur2 = ((Date.now() - t0) / 1e3).toFixed(1);
-              console.log(dim("  ") + darkGray(`\u23F1 ${dur2}s \xB7 \u2191${inTok2} \u2193${outTok2} \u0442\u043E\u043A \xB7 ${blue(modelName(state.model))}`));
+              renderer.push(part.text);
+              break;
             }
-          } catch (e2) {
-            console.log("\n" + red("\u2717 \u041E\u0448\u0438\u0431\u043A\u0430 fallback: ") + String(e2?.message || e2).slice(0, 300));
-          }
-        }
-      }, 1e4);
-      result = streamText({
-        model: getModel(state.model),
-        system: systemPrompt(),
-        messages: state.messages,
-        tools,
-        stopWhen: isStepCount(30),
-        abortSignal: controller.signal,
-        onError: (err) => {
-          stopSpinner();
-          console.log("\n" + red("\u2717 \u041E\u0448\u0438\u0431\u043A\u0430 API: ") + String(err?.message || err).slice(0, 500));
-          if (String(err?.message || "").match(/api key|unauthorized|401|credential/i)) {
-            console.log(dim("  \u0417\u0430\u0434\u0430\u0439 \u043A\u043B\u044E\u0447: ") + purple("/login") + dim(" \u0438\u043B\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0438 \u0432 ~/.stella/config.json"));
-          }
-        }
-      });
-      const renderer = createStreamRenderer((s) => process.stdout.write(s));
-      for await (const part of result.fullStream) {
-        switch (part.type) {
-          case "text-delta": {
-            stopSpinner();
-            gotText = true;
-            clearTimeout(fallbackTimer);
-            if (firstText) {
-              process.stdout.write("\n" + violet("\u23FA "));
-              firstText = false;
+            case "text-end": {
+              renderer.flush();
+              firstText = true;
+              break;
             }
-            renderer.push(part.text);
-            break;
-          }
-          case "text-end": {
-            renderer.flush();
-            firstText = true;
-            break;
-          }
-          case "tool-call": {
-            stopSpinner();
-            renderer.flush();
-            console.log("\n" + purple("\u23FA ") + bold(white(toolLabel(part.toolName, part.input))));
-            startSpinner("\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u044E");
-            break;
-          }
-          case "tool-result": {
-            stopSpinner();
-            console.log(darkGray("  \u23BF ") + toolResultSummary(part.toolName, part.output));
-            startSpinner();
-            break;
-          }
-          case "tool-error": {
-            stopSpinner();
-            console.log(darkGray("  \u23BF ") + red("\u043E\u0448\u0438\u0431\u043A\u0430 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0430"));
-            startSpinner();
-            break;
-          }
-          case "error": {
-            stopSpinner();
-            renderer.flush();
-            console.log("\n" + red("\u2717 \u041E\u0448\u0438\u0431\u043A\u0430: ") + String(part.error?.message || part.error).slice(0, 300));
-            break;
-          }
-          case "finish": {
-            stopSpinner();
-            clearTimeout(fallbackTimer);
-            renderer.flush();
-            break;
+            case "tool-call": {
+              stopSpinner();
+              gotOutput = true;
+              renderer.flush();
+              console.log("\n" + purple("\u23FA ") + bold(white(toolLabel(part.toolName, part.input))));
+              startSpinner("\u0412\u044B\u043F\u043E\u043B\u043D\u044F\u044E");
+              break;
+            }
+            case "tool-result": {
+              stopSpinner();
+              console.log(darkGray("  \u23BF ") + toolResultSummary(part.toolName, part.output));
+              startSpinner();
+              break;
+            }
+            case "tool-error": {
+              stopSpinner();
+              console.log(darkGray("  \u23BF ") + red("\u043E\u0448\u0438\u0431\u043A\u0430 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0430"));
+              startSpinner();
+              break;
+            }
+            case "error": {
+              stopSpinner();
+              renderer.flush();
+              console.log("\n" + red("\u2717 \u041E\u0448\u0438\u0431\u043A\u0430: ") + String(part.error?.message || part.error).slice(0, 300));
+              break;
+            }
+            case "finish": {
+              stopSpinner();
+              renderer.flush();
+              break;
+            }
           }
         }
+        const response = await result.response;
+        state.messages.push(...response.messages);
+        reportUsage(await result.usage, t0);
+      } catch (e) {
+        if (!stalled) throw e;
+      } finally {
+        clearTimeout(stallTimer);
+        controller.signal.removeEventListener("abort", abortStream);
       }
-      const response = await result.response;
-      state.messages.push(...response.messages);
-      const usage = await result.usage;
-      const inTok = usage.inputTokens ?? 0;
-      const outTok = usage.outputTokens ?? 0;
-      state.totalTokens.input += inTok;
-      state.totalTokens.output += outTok;
-      const cost = (inTok * PRICING.input + outTok * PRICING.output) / 1e6;
-      state.totalCost += cost;
-      const dur = ((Date.now() - t0) / 1e3).toFixed(1);
-      console.log();
-      console.log(
-        dim("  ") + darkGray(`\u23F1 ${dur}s \xB7 \u2191${inTok} \u2193${outTok} \u0442\u043E\u043A \xB7 ~$${cost.toFixed(4)} \xB7 ${blue(modelName(state.model))}`)
-      );
+      if (stalled) await runWithoutStreaming(controller, t0);
     }
   } catch (e) {
     stopSpinner();
