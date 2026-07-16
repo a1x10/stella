@@ -60,7 +60,7 @@ const HISTORY_PATH = path.join(CONFIG_DIR, "history.json")
 const ZEN_BASE_URL = "https://opencode.ai/zen/v1"
 
 const MODELS = [
-  { id: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash (бесплатная)" },
+  { id: "deepseek-v4-flash-free", label: "Stella V3.8 Flash (бесплатная)" },
   { id: "gpt-5.4", label: "GPT 5.4 (OpenAI)" },
   { id: "gpt-5.4-mini", label: "GPT 5.4 Mini (OpenAI)" },
   { id: "gpt-5.2", label: "GPT 5.2 (OpenAI)" },
@@ -80,6 +80,19 @@ const MODELS = [
   { id: "kimi-k2.6", label: "Kimi K2.6 (Moonshot)" },
   { id: "minimax-m3", label: "MiniMax M3" },
 ]
+
+// наружу показываем имя Stella, в API уходит id провайдера
+const MODEL_ALIASES = {
+  "deepseek-v4-flash-free": "stella-v3.8-flash",
+}
+const MODEL_IDS = Object.fromEntries(Object.entries(MODEL_ALIASES).map(([id, alias]) => [alias, id]))
+
+function modelName(id) {
+  return MODEL_ALIASES[id] || id
+}
+function modelId(name) {
+  return MODEL_IDS[name] || name
+}
 
 // ---------- config ----------
 function loadConfig() {
@@ -130,7 +143,7 @@ for (const envFile of [".env.local", ".env.development.local", ".env"]) {
 
 // ---------- state ----------
 const state = {
-  model: config.model || MODELS[0].id,
+  model: modelId(config.model || MODELS[0].id),
   messages: [],
   totalTokens: { input: 0, output: 0 },
   totalCost: 0,
@@ -151,7 +164,7 @@ if (args.includes("--version") || args.includes("-v")) {
   console.log(`stella-coder ${VERSION}`)
   process.exit(0)
 }
-if (args.includes("--model")) state.model = args[args.indexOf("--model") + 1] || state.model
+if (args.includes("--model")) state.model = modelId(args[args.indexOf("--model") + 1]) || state.model
 
 // ---------- system prompt ----------
 function systemPrompt() {
@@ -184,14 +197,41 @@ function systemPrompt() {
 - Git экосистема: ветки, PR, мержи, разрешение конфликтов
 - Автосжатие контекста при необходимости
 
-Правила:
+Правила работы:
 - Используй инструменты (read_file, edit_file, write_file, bash, grep, glob, list_dir), чтобы РЕАЛЬНО выполнять задачи.
 - Перед изменением файла всегда читай его.
 - Для многошаговых задач используй todo_write.
 - Автоматически определяй и запускай линтеры/тесты после изменений.
 - При большом контексте — сжимай автоматически.
-- Отвечай кратко и по делу, в формате markdown. Код — в блоках с указанием языка.
-- Отвечай на языке пользователя.${projectContext}${repoContext}`
+- Отвечай на языке пользователя.
+
+Как писать код — пиши как живой сеньор, а не как генератор текста:
+- Подстраивайся под стиль файла, который правишь: те же отступы, кавычки, точки с запятой, именование, порядок импортов, идиомы. Файл должен выглядеть так, будто его писал один человек.
+- Пиши минимальный код, который решает задачу. Не добавляй абстракции, слои, фабрики, конфиги и "хуки на будущее", которых никто не просил.
+- Не пиши защитный мусор: лишние try/catch, которые глотают ошибку, проверки на null там, где значение всегда есть, валидацию аргументов внутренних функций.
+- Имена — короткие и точные, из языка предметной области проекта. Никаких data, result, item, handleStuff, doProcess, MyClass, temp2.
+- Ранние return вместо лесенки из else. Плоский код вместо вложенности на 4 уровня.
+- Не дублируй: если такая функция/хелпер/константа уже есть в проекте — используй её, а не пиши вторую такую же рядом.
+- Удаляй код, который заменил. Не оставляй закомментированные куски, старые версии функций и //TODO про "потом убрать".
+
+Комментарии — почти никогда:
+- Комментарий пишется, только чтобы объяснить причину неочевидного решения или ограничение, которое из кода не видно (баг библиотеки, требование API, гонка).
+- Запрещено: комментарии, пересказывающие следующую строку ("// увеличиваем счётчик"), комментарии-заголовки секций, "// добавлено мной", "// исправлено", "// теперь работает правильно", "// шаг 1/2/3".
+- Не ставь JSDoc/докстринги на каждую функцию — только там, где так уже принято в этом файле.
+- Пиши комментарии на языке остальных комментариев файла.
+
+Как отвечать текстом:
+- Обычный человеческий текст, коротко и по делу. Никакого markdown-оформления ради оформления.
+- Заголовки (#, ##), горизонтальные линии (---), эмодзи и жирный шрифт — не используй. Жирным можно выделить одно слово, если без него правда непонятно.
+- Списки — только когда это реально список из нескольких равнозначных пунктов. Объяснения пиши прозой, а не буллетами.
+- Длинное тире (—) ставь редко, как человек: чаще подходит запятая, скобки или двоеточие.
+- Никаких вступлений и заключений: "Конечно!", "Отличный вопрос", "Вот что я сделал", "Подводя итог", "В целом", "Надеюсь, это помогло", "Дайте знать, если нужно ещё".
+- Не хвали код и не рекламируй: "мощный", "гибкий", "чистый и масштабируемый", "готов к продакшену", "играет ключевую роль", "это не просто X, а Y".
+- Не пиши шаблонные предостережения ("важно отметить", "стоит учитывать") и не пересказывай сделанное списком изменений, если пользователь не просил.
+- Начинай с сути: что получилось или что сломалось. Детали — потом.
+- Не ври про результат. Тесты упали — так и скажи и покажи вывод. Что-то не проверил — скажи, что не проверил.
+
+Код — в блоках с указанием языка. Отдельные строки кода упоминай как file.ts:42.${projectContext}${repoContext}`
 }
 
 // ---------- spinner ----------
@@ -216,10 +256,48 @@ function stopSpinner() {
 }
 
 // ---------- permissions ----------
+// Спрашиваем только про то, что трудно откатить. Правки внутри проекта видно в git,
+// а чтение/сборка/тесты вообще ничего не ломают — за них дёргать пользователя незачем.
+const READONLY_BASH = /^(git\s+(status|diff|log|show|branch|remote|stash\s+list|rev-parse|ls-files)|ls|dir|pwd|cd|cat|type|head|tail|wc|echo|whoami|hostname|date|which|where|find|grep|rg|node\s+-[ve]|npm\s+(test|run|ls|view|-v)|pnpm\s+(test|run|lint|build|list|-v)|yarn\s+(test|run)|npx\s+(tsc|eslint|prettier|jest|vitest)|tsc|eslint|prettier|jest|vitest|pytest|python\s+-m\s+pytest|go\s+(test|build|vet)|cargo\s+(test|build|check|clippy)|dotnet\s+(test|build))\b/i
+const DANGEROUS_BASH = /(\brm\s+-[a-z]*[rf]|\brmdir\b|\bdel\s+\/|\bformat\b|\bmkfs|\bdd\s+if=|\bshutdown\b|\breboot\b|\bsudo\b|\bchmod\s+777|\bcurl\b[^|]*\|\s*(sh|bash)|\bwget\b[^|]*\|\s*(sh|bash)|\biex\b|Invoke-Expression|\bgit\s+push\b|\bgit\s+reset\s+--hard|\bgit\s+clean\s+-|\bnpm\s+publish|\breg\s+delete|\btaskkill\b|\bRemove-Item\b)/i
+
+function isInProject(p) {
+  const root = process.cwd()
+  const abs = path.resolve(root, p)
+  return abs === root || abs.startsWith(root + path.sep)
+}
+
+function isSafeWrite(p) {
+  if (!p || !isInProject(p)) return false
+  const rel = path.relative(process.cwd(), path.resolve(process.cwd(), p))
+  const parts = rel.split(path.sep)
+  if (parts[0] === ".git" || parts[0] === "node_modules") return false
+  return !/^\.env/.test(parts[parts.length - 1])
+}
+
+function isSafeBash(command) {
+  if (!command || DANGEROUS_BASH.test(command)) return false
+  // редирект пишет в файл, подстановка прячет произвольную команду — читающими их не считаем
+  if (/>|`|\$\(/.test(command)) return false
+  // «git status && rm -rf .» — безопасен только если безопасна каждая часть цепочки
+  return command
+    .split(/&&|\|\||;|\||\n/)
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .every((c) => READONLY_BASH.test(c))
+}
+
+function isAutoAllowed(kind, details) {
+  if (kind === "write") return isSafeWrite(details.path)
+  if (kind === "bash") return isSafeBash(details.command)
+  return false
+}
+
 let rl // set later
-async function askPermission(kind, summary) {
+async function askPermission(kind, summary, details = {}) {
   if (printMode) return true
   if (state.alwaysAllow.has(kind)) return true
+  if (isAutoAllowed(kind, details)) return true
   stopSpinner()
   console.log()
   console.log(box([
@@ -298,20 +376,13 @@ async function runTurn(userText) {
     console.log(red("\n  ✗ API ключ не задан. Введи /login для настройки.\n"))
     return
   }
-  console.log(dim(`  → модель: ${state.model}, ключ: ${apiKey ? "есть" : "нет"}`))
+  console.log(dim(`  → модель: ${modelName(state.model)}, ключ: ${apiKey ? "есть" : "нет"}`))
   state.messages.push({ role: "user", content: userText })
   state.turns++
   state.interrupted = false
 
   const isOllama = state.model.startsWith("ollama:")
   const controller = new AbortController()
-
-  // 30 second timeout
-  const timeout = setTimeout(() => {
-    controller.abort()
-    stopSpinner()
-    console.log("\n" + red("✗ Таймаут: API не отвечает 30 секунд. Проверь модель: /model"))
-  }, 30000)
 
   const onSigint = () => {
     state.interrupted = true
@@ -395,7 +466,7 @@ async function runTurn(userText) {
               state.totalTokens.input += inTok
               state.totalTokens.output += outTok
               const dur = ((Date.now() - t0) / 1000).toFixed(1)
-              console.log(dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ${blue(state.model)}`))
+              console.log(dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ${blue(modelName(state.model))}`))
             }
           } catch (e2) {
             console.log("\n" + red("✗ Ошибка fallback: ") + String(e2?.message || e2).slice(0, 300))
@@ -487,7 +558,7 @@ async function runTurn(userText) {
       const dur = ((Date.now() - t0) / 1000).toFixed(1)
       console.log()
       console.log(
-        dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ~$${cost.toFixed(4)} · ${blue(state.model)}`),
+        dim("  ") + darkGray(`⏱ ${dur}s · ↑${inTok} ↓${outTok} ток · ~$${cost.toFixed(4)} · ${blue(modelName(state.model))}`),
       )
     }
   } catch (e) {
@@ -501,7 +572,6 @@ async function runTurn(userText) {
       }
     }
   } finally {
-    clearTimeout(timeout)
     process.removeListener("SIGINT", onSigint)
   }
   console.log()
@@ -986,7 +1056,7 @@ async function handleCommand(line) {
         const active = m.id === state.model
         console.log(
           "  " + (active ? violet("● ") : darkGray("○ ")) + bold(white(String(i + 1))) + ". " +
-          (active ? violet(m.label) : gray(m.label)) + dim(` (${m.id})`),
+          (active ? violet(m.label) : gray(m.label)) + dim(` (${modelName(m.id)})`),
         )
       })
       const ans = await question("\n  " + violet("Номер модели › "))
@@ -994,14 +1064,14 @@ async function handleCommand(line) {
       if (MODELS[idx]) {
         state.model = MODELS[idx].id
         saveConfig({ ...loadConfig(), model: state.model })
-        console.log("  " + green("✓ Модель: ") + blue(state.model) + "\n")
+        console.log("  " + green("✓ Модель: ") + blue(modelName(state.model)) + "\n")
       }
       return
     }
     case "/clear": {
       state.messages = []
       console.clear()
-      printBanner({ model: state.model, cwd: process.cwd(), version: VERSION })
+      printBanner({ model: modelName(state.model), cwd: process.cwd(), version: VERSION })
       return
     }
     case "/compact": {
@@ -1030,7 +1100,7 @@ async function handleCommand(line) {
         dim("Токены (вход): ") + blue(String(state.totalTokens.input)),
         dim("Токены (выход):") + blue(" " + String(state.totalTokens.output)),
         dim("Стоимость:     ") + green(`~$${state.totalCost.toFixed(4)}`),
-        dim("Модель:        ") + violet(state.model),
+        dim("Модель:        ") + violet(modelName(state.model)),
       ], { title: "Статистика", padding: 2 }))
       console.log()
       return
@@ -1073,7 +1143,7 @@ async function handleCommand(line) {
       console.log()
       console.log(box([
         dim("Конфиг:   ") + gray(CONFIG_PATH),
-        dim("Модель:   ") + violet(state.model),
+        dim("Модель:   ") + violet(modelName(state.model)),
         dim("API-ключ: ") + (apiKey ? green("задан") : red("не задан")),
         dim("Endpoint: ") + gray(ZEN_BASE_URL),
         dim("Всегда:   ") + gray([...state.alwaysAllow].join(", ") || "—"),
@@ -2113,7 +2183,7 @@ async function handleCommand(line) {
       if (!arg) { console.log(dim("\n  Использование: /load <путь к сессии>\n")); return }
       try {
         const session = JSON.parse(fs.readFileSync(arg.trim(), "utf8"))
-        state.model = session.model || state.model
+        state.model = modelId(session.model || state.model)
         state.messages = session.messages || []
         console.log(green(`\n  ✓ Сессия загружена (${state.messages.length} сообщений)\n`))
       } catch (e) {
@@ -5820,7 +5890,7 @@ async function main() {
   }
 
   console.clear()
-  printBanner({ model: state.model, cwd: process.cwd(), version: VERSION })
+  printBanner({ model: modelName(state.model), cwd: process.cwd(), version: VERSION })
 
   let lastSigint = 0
   rl.on("SIGINT", () => {

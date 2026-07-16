@@ -3484,13 +3484,13 @@ var _b11;
 var NoSuchModelError = class extends (_b11 = AISDKError, _a11 = symbol11, _b11) {
   constructor({
     errorName = name10,
-    modelId,
+    modelId: modelId2,
     modelType,
-    message = `No such ${modelType}: ${modelId}`
+    message = `No such ${modelType}: ${modelId2}`
   }) {
     super({ name: errorName, message });
     this[_a11] = true;
-    this.modelId = modelId;
+    this.modelId = modelId2;
     this.modelType = modelType;
   }
   static isInstance(error51) {
@@ -25284,7 +25284,7 @@ var GatewayModelNotFoundError = class extends (_b52 = GatewayError, _a52 = symbo
   constructor({
     message = "Model not found",
     statusCode = 404,
-    modelId,
+    modelId: modelId2,
     cause,
     generationId
   } = {}) {
@@ -25292,7 +25292,7 @@ var GatewayModelNotFoundError = class extends (_b52 = GatewayError, _a52 = symbo
     this[_a52] = true;
     this.name = name42;
     this.type = "model_not_found";
-    this.modelId = modelId;
+    this.modelId = modelId2;
   }
   static isInstance(error51) {
     return GatewayError.hasMarker(error51) && symbol52 in error51;
@@ -25889,8 +25889,8 @@ var gatewayGenerationInfoResponseSchema = lazySchema(
   )
 );
 var GatewayLanguageModel = class _GatewayLanguageModel {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
     this.supportedUrls = { "*/*": [/.*/] };
@@ -26038,10 +26038,10 @@ var GatewayLanguageModel = class _GatewayLanguageModel {
   getUrl() {
     return `${this.config.baseURL}/language-model`;
   }
-  getModelConfigHeaders(modelId, streaming) {
+  getModelConfigHeaders(modelId2, streaming) {
     return {
       "ai-language-model-specification-version": "4",
-      "ai-language-model-id": modelId,
+      "ai-language-model-id": modelId2,
       "ai-language-model-streaming": String(streaming)
     };
   }
@@ -26056,8 +26056,8 @@ function maybeBase64EncodeFileData(data) {
   return data;
 }
 var GatewayEmbeddingModel = class _GatewayEmbeddingModel {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
     this.maxEmbeddingsPerCall = 2048;
@@ -26166,8 +26166,8 @@ var gatewayEmbeddingResponseSchema = lazySchema(
   )
 );
 var GatewayImageModel = class _GatewayImageModel {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
     this.maxImagesPerCall = Number.MAX_SAFE_INTEGER;
@@ -26310,8 +26310,8 @@ var gatewayImageResponseSchema = external_exports.object({
   usage: gatewayImageUsageSchema.optional()
 });
 var GatewayVideoModel = class {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
     this.maxVideosPerCall = Number.MAX_SAFE_INTEGER;
@@ -26529,8 +26529,8 @@ var gatewayVideoEventSchema = external_exports.discriminatedUnion("type", [
   })
 ]);
 var GatewayRerankingModel = class {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
   }
@@ -26635,8 +26635,8 @@ var gatewayRerankingResponseSchema = lazySchema(
   )
 );
 var GatewaySpeechModel = class {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
   }
@@ -26744,8 +26744,8 @@ var gatewaySpeechResponseSchema = external_exports.object({
   providerMetadata: external_exports.record(external_exports.string(), providerMetadataEntrySchema3).optional()
 });
 var GatewayTranscriptionModel = class {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
   }
@@ -26857,9 +26857,9 @@ var gatewayTranscriptionResponseSchema = external_exports.object({
   providerMetadata: external_exports.record(external_exports.string(), providerMetadataEntrySchema4).optional()
 });
 var GatewayRealtimeModel = class {
-  constructor(modelId, config3) {
+  constructor(modelId2, config3) {
     this.specificationVersion = "v4";
-    this.modelId = modelId;
+    this.modelId = modelId2;
     this.provider = config3.provider;
     this.config = config3;
   }
@@ -26904,9 +26904,9 @@ var GatewayRealtimeModel = class {
     return config3;
   }
 };
-function toGatewayRealtimeUrl(baseURL, modelId) {
+function toGatewayRealtimeUrl(baseURL, modelId2) {
   const url2 = new URL(`${baseURL.replace(/^http/, "ws")}/realtime-model`);
-  url2.searchParams.set("ai-model-id", modelId);
+  url2.searchParams.set("ai-model-id", modelId2);
   return url2.toString();
 }
 var exaSearchInputSchema = lazySchema(
@@ -27329,8 +27329,8 @@ function createGateway(options = {}) {
       };
     };
   };
-  const createLanguageModel = (modelId) => {
-    return new GatewayLanguageModel(modelId, {
+  const createLanguageModel = (modelId2) => {
+    return new GatewayLanguageModel(modelId2, {
       provider: "gateway",
       baseURL,
       headers: getHeaders,
@@ -27395,21 +27395,21 @@ function createGateway(options = {}) {
       );
     });
   };
-  const provider = function(modelId) {
+  const provider = function(modelId2) {
     if (new.target) {
       throw new Error(
         "The Gateway Provider model function cannot be called with the new keyword."
       );
     }
-    return createLanguageModel(modelId);
+    return createLanguageModel(modelId2);
   };
   provider.specificationVersion = "v4";
   provider.getAvailableModels = getAvailableModels;
   provider.getCredits = getCredits;
   provider.getSpendReport = getSpendReport;
   provider.getGenerationInfo = getGenerationInfo;
-  provider.imageModel = (modelId) => {
-    return new GatewayImageModel(modelId, {
+  provider.imageModel = (modelId2) => {
+    return new GatewayImageModel(modelId2, {
       provider: "gateway",
       baseURL,
       headers: getHeaders,
@@ -27418,8 +27418,8 @@ function createGateway(options = {}) {
     });
   };
   provider.languageModel = createLanguageModel;
-  const createEmbeddingModel = (modelId) => {
-    return new GatewayEmbeddingModel(modelId, {
+  const createEmbeddingModel = (modelId2) => {
+    return new GatewayEmbeddingModel(modelId2, {
       provider: "gateway",
       baseURL,
       headers: getHeaders,
@@ -27429,8 +27429,8 @@ function createGateway(options = {}) {
   };
   provider.embeddingModel = createEmbeddingModel;
   provider.textEmbeddingModel = createEmbeddingModel;
-  provider.videoModel = (modelId) => {
-    return new GatewayVideoModel(modelId, {
+  provider.videoModel = (modelId2) => {
+    return new GatewayVideoModel(modelId2, {
       provider: "gateway",
       baseURL,
       headers: getHeaders,
@@ -27438,8 +27438,8 @@ function createGateway(options = {}) {
       o11yHeaders: createO11yHeaders()
     });
   };
-  const createRerankingModel = (modelId) => {
-    return new GatewayRerankingModel(modelId, {
+  const createRerankingModel = (modelId2) => {
+    return new GatewayRerankingModel(modelId2, {
       provider: "gateway",
       baseURL,
       headers: getHeaders,
@@ -27449,8 +27449,8 @@ function createGateway(options = {}) {
   };
   provider.rerankingModel = createRerankingModel;
   provider.reranking = createRerankingModel;
-  const createSpeechModel = (modelId) => {
-    return new GatewaySpeechModel(modelId, {
+  const createSpeechModel = (modelId2) => {
+    return new GatewaySpeechModel(modelId2, {
       provider: "gateway",
       baseURL,
       headers: getHeaders,
@@ -27460,8 +27460,8 @@ function createGateway(options = {}) {
   };
   provider.speechModel = createSpeechModel;
   provider.speech = createSpeechModel;
-  const createTranscriptionModel = (modelId) => {
-    return new GatewayTranscriptionModel(modelId, {
+  const createTranscriptionModel = (modelId2) => {
+    return new GatewayTranscriptionModel(modelId2, {
       provider: "gateway",
       baseURL,
       headers: getHeaders,
@@ -27471,18 +27471,18 @@ function createGateway(options = {}) {
   };
   provider.transcriptionModel = createTranscriptionModel;
   provider.transcription = createTranscriptionModel;
-  const createRealtimeModel = (modelId) => new GatewayRealtimeModel(modelId, {
+  const createRealtimeModel = (modelId2) => new GatewayRealtimeModel(modelId2, {
     provider: "gateway.realtime",
     baseURL,
     teamIdOrSlug: options.teamIdOrSlug,
     createClientSecret: mintRealtimeClientSecret
   });
   provider.experimental_realtime = Object.assign(
-    (modelId) => createRealtimeModel(modelId),
+    (modelId2) => createRealtimeModel(modelId2),
     {
       getToken: async (tokenOptions) => {
-        const { model: modelId, ...secretOptions } = tokenOptions;
-        const model = createRealtimeModel(modelId);
+        const { model: modelId2, ...secretOptions } = tokenOptions;
+        const model = createRealtimeModel(modelId2);
         const secret = await model.doCreateClientSecret(secretOptions);
         return {
           token: secret.token,
@@ -27927,7 +27927,7 @@ var logWarnings = (options) => {
 };
 function logV2CompatibilityWarning({
   provider,
-  modelId
+  modelId: modelId2
 }) {
   logWarnings({
     warnings: [
@@ -27938,7 +27938,7 @@ function logV2CompatibilityWarning({
       }
     ],
     provider,
-    model: modelId
+    model: modelId2
   });
 }
 function asEmbeddingModelV3(model) {
@@ -28166,11 +28166,11 @@ function asProviderV3(provider) {
   const v2Provider = provider;
   return {
     specificationVersion: "v3",
-    languageModel: (modelId) => asLanguageModelV3(v2Provider.languageModel(modelId)),
-    embeddingModel: (modelId) => asEmbeddingModelV3(v2Provider.textEmbeddingModel(modelId)),
-    imageModel: (modelId) => asImageModelV3(v2Provider.imageModel(modelId)),
-    transcriptionModel: v2Provider.transcriptionModel ? (modelId) => asTranscriptionModelV3(v2Provider.transcriptionModel(modelId)) : void 0,
-    speechModel: v2Provider.speechModel ? (modelId) => asSpeechModelV3(v2Provider.speechModel(modelId)) : void 0,
+    languageModel: (modelId2) => asLanguageModelV3(v2Provider.languageModel(modelId2)),
+    embeddingModel: (modelId2) => asEmbeddingModelV3(v2Provider.textEmbeddingModel(modelId2)),
+    imageModel: (modelId2) => asImageModelV3(v2Provider.imageModel(modelId2)),
+    transcriptionModel: v2Provider.transcriptionModel ? (modelId2) => asTranscriptionModelV3(v2Provider.transcriptionModel(modelId2)) : void 0,
+    speechModel: v2Provider.speechModel ? (modelId2) => asSpeechModelV3(v2Provider.speechModel(modelId2)) : void 0,
     rerankingModel: void 0
     // v2 providers don't have reranking models
   };
@@ -28182,12 +28182,12 @@ function asProviderV4(provider) {
   const v3Provider = !("specificationVersion" in provider) || provider.specificationVersion !== "v3" ? asProviderV3(provider) : provider;
   return {
     specificationVersion: "v4",
-    languageModel: (modelId) => asLanguageModelV4(v3Provider.languageModel(modelId)),
-    embeddingModel: (modelId) => asEmbeddingModelV4(v3Provider.embeddingModel(modelId)),
-    imageModel: (modelId) => asImageModelV4(v3Provider.imageModel(modelId)),
-    transcriptionModel: v3Provider.transcriptionModel ? (modelId) => asTranscriptionModelV4(v3Provider.transcriptionModel(modelId)) : void 0,
-    speechModel: v3Provider.speechModel ? (modelId) => asSpeechModelV4(v3Provider.speechModel(modelId)) : void 0,
-    rerankingModel: v3Provider.rerankingModel ? (modelId) => asRerankingModelV4(v3Provider.rerankingModel(modelId)) : void 0
+    languageModel: (modelId2) => asLanguageModelV4(v3Provider.languageModel(modelId2)),
+    embeddingModel: (modelId2) => asEmbeddingModelV4(v3Provider.embeddingModel(modelId2)),
+    imageModel: (modelId2) => asImageModelV4(v3Provider.imageModel(modelId2)),
+    transcriptionModel: v3Provider.transcriptionModel ? (modelId2) => asTranscriptionModelV4(v3Provider.transcriptionModel(modelId2)) : void 0,
+    speechModel: v3Provider.speechModel ? (modelId2) => asSpeechModelV4(v3Provider.speechModel(modelId2)) : void 0,
+    rerankingModel: v3Provider.rerankingModel ? (modelId2) => asRerankingModelV4(v3Provider.rerankingModel(modelId2)) : void 0
   };
 }
 function resolveLanguageModel(model) {
@@ -31247,7 +31247,7 @@ var DefaultStepResult = class {
     callId,
     stepNumber,
     provider,
-    modelId,
+    modelId: modelId2,
     runtimeContext,
     toolsContext,
     content,
@@ -31262,7 +31262,7 @@ var DefaultStepResult = class {
   }) {
     this.callId = callId;
     this.stepNumber = stepNumber;
-    this.model = { provider, modelId };
+    this.model = { provider, modelId: modelId2 };
     this.runtimeContext = runtimeContext;
     this.toolsContext = toolsContext;
     this.content = content;
@@ -34874,7 +34874,7 @@ function createLanguageModelV4StreamPartToLanguageModelStreamPartTransform({
   refineToolInput,
   callId,
   provider,
-  modelId,
+  modelId: modelId2,
   generateId: generateId2,
   now: now2,
   callStartTimestampMs,
@@ -35023,7 +35023,7 @@ function createLanguageModelV4StreamPartToLanguageModelStreamPartTransform({
             event: {
               callId,
               provider,
-              modelId,
+              modelId: modelId2,
               finishReason: chunk.finishReason.unified,
               usage,
               content: modelCallContent,
@@ -37512,10 +37512,10 @@ function prepareTools2({
   }
 }
 var OpenAICompatibleChatLanguageModel = class _OpenAICompatibleChatLanguageModel {
-  constructor(modelId, config3) {
+  constructor(modelId2, config3) {
     this.specificationVersion = "v4";
     var _a24, _b18;
-    this.modelId = modelId;
+    this.modelId = modelId2;
     this.config = config3;
     const errorStructure = (_a24 = config3.errorStructure) != null ? _a24 : defaultOpenAICompatibleErrorStructure;
     this.chunkSchema = createOpenAICompatibleChatChunkSchema(
@@ -38224,10 +38224,10 @@ var openaiCompatibleLanguageModelCompletionOptions = external_exports.object({
   user: external_exports.string().optional()
 });
 var OpenAICompatibleCompletionLanguageModel = class _OpenAICompatibleCompletionLanguageModel {
-  constructor(modelId, config3) {
+  constructor(modelId2, config3) {
     this.specificationVersion = "v4";
     var _a24;
-    this.modelId = modelId;
+    this.modelId = modelId2;
     this.config = config3;
     const errorStructure = (_a24 = config3.errorStructure) != null ? _a24 : defaultOpenAICompatibleErrorStructure;
     this.chunkSchema = createOpenAICompatibleCompletionChunkSchema(
@@ -38521,9 +38521,9 @@ var openaiCompatibleEmbeddingModelOptions = external_exports.object({
   user: external_exports.string().optional()
 });
 var OpenAICompatibleEmbeddingModel = class _OpenAICompatibleEmbeddingModel {
-  constructor(modelId, config3) {
+  constructor(modelId2, config3) {
     this.specificationVersion = "v4";
-    this.modelId = modelId;
+    this.modelId = modelId2;
     this.config = config3;
   }
   get provider() {
@@ -38636,8 +38636,8 @@ var openaiTextEmbeddingResponseSchema = external_exports.object({
   providerMetadata: external_exports.record(external_exports.string(), external_exports.record(external_exports.string(), external_exports.any())).optional()
 });
 var OpenAICompatibleImageModel = class _OpenAICompatibleImageModel {
-  constructor(modelId, config3) {
-    this.modelId = modelId;
+  constructor(modelId2, config3) {
+    this.modelId = modelId2;
     this.config = config3;
     this.specificationVersion = "v4";
     this.maxImagesPerCall = 10;
@@ -38797,8 +38797,8 @@ function createOpenAICompatible(options) {
     headers: getHeaders,
     fetch: options.fetch
   });
-  const createLanguageModel = (modelId) => createChatModel(modelId);
-  const createChatModel = (modelId) => new OpenAICompatibleChatLanguageModel(modelId, {
+  const createLanguageModel = (modelId2) => createChatModel(modelId2);
+  const createChatModel = (modelId2) => new OpenAICompatibleChatLanguageModel(modelId2, {
     ...getCommonModelConfig("chat"),
     includeUsage: options.includeUsage,
     supportsStructuredOutputs: options.supportsStructuredOutputs,
@@ -38807,15 +38807,15 @@ function createOpenAICompatible(options) {
     metadataExtractor: options.metadataExtractor,
     convertUsage: options.convertUsage
   });
-  const createCompletionModel = (modelId) => new OpenAICompatibleCompletionLanguageModel(modelId, {
+  const createCompletionModel = (modelId2) => new OpenAICompatibleCompletionLanguageModel(modelId2, {
     ...getCommonModelConfig("completion"),
     includeUsage: options.includeUsage
   });
-  const createEmbeddingModel = (modelId) => new OpenAICompatibleEmbeddingModel(modelId, {
+  const createEmbeddingModel = (modelId2) => new OpenAICompatibleEmbeddingModel(modelId2, {
     ...getCommonModelConfig("embedding")
   });
-  const createImageModel = (modelId) => new OpenAICompatibleImageModel(modelId, getCommonModelConfig("image"));
-  const provider = (modelId) => createLanguageModel(modelId);
+  const createImageModel = (modelId2) => new OpenAICompatibleImageModel(modelId2, getCommonModelConfig("image"));
+  const provider = (modelId2) => createLanguageModel(modelId2);
   provider.specificationVersion = "v4";
   provider.languageModel = createLanguageModel;
   provider.chatModel = createChatModel;
@@ -38865,7 +38865,7 @@ function createTools(permissions) {
         content: external_exports.string()
       }),
       execute: async ({ path: p, content }) => {
-        const ok = await permissions.ask("write", `Write(${p}) \u2014 ${content.split("\n").length} \u0441\u0442\u0440\u043E\u043A`);
+        const ok = await permissions.ask("write", `Write(${p}) \u2014 ${content.split("\n").length} \u0441\u0442\u0440\u043E\u043A`, { path: p });
         if (!ok) return { error: "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C \u043E\u0442\u043A\u043B\u043E\u043D\u0438\u043B \u0437\u0430\u043F\u0438\u0441\u044C \u0444\u0430\u0439\u043B\u0430" };
         const abs = resolveSafe(p);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -38888,7 +38888,7 @@ function createTools(permissions) {
         const count = src.split(old_string).length - 1;
         if (count === 0) return { error: "old_string \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D \u0432 \u0444\u0430\u0439\u043B\u0435" };
         if (count > 1 && !replace_all) return { error: `old_string \u0432\u0441\u0442\u0440\u0435\u0447\u0430\u0435\u0442\u0441\u044F ${count} \u0440\u0430\u0437 \u2014 \u0443\u0442\u043E\u0447\u043D\u0438 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442 \u0438\u043B\u0438 replace_all` };
-        const ok = await permissions.ask("write", `Edit(${p})`);
+        const ok = await permissions.ask("write", `Edit(${p})`, { path: p });
         if (!ok) return { error: "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C \u043E\u0442\u043A\u043B\u043E\u043D\u0438\u043B \u043F\u0440\u0430\u0432\u043A\u0443" };
         const out = replace_all ? src.split(old_string).join(new_string) : src.replace(old_string, new_string);
         fs.writeFileSync(abs, out, "utf8");
@@ -38995,7 +38995,7 @@ function createTools(permissions) {
         timeout_ms: external_exports.number().optional()
       }),
       execute: async ({ command: command2, timeout_ms = 12e4 }) => {
-        const ok = await permissions.ask("bash", `Bash(${command2})`);
+        const ok = await permissions.ask("bash", `Bash(${command2})`, { command: command2 });
         if (!ok) return { error: "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C \u043E\u0442\u043A\u043B\u043E\u043D\u0438\u043B \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435 \u043A\u043E\u043C\u0430\u043D\u0434\u044B" };
         try {
           const out = execSync(command2, {
@@ -48854,7 +48854,7 @@ var CONFIG_PATH = path17.join(CONFIG_DIR5, "config.json");
 var HISTORY_PATH = path17.join(CONFIG_DIR5, "history.json");
 var ZEN_BASE_URL = "https://opencode.ai/zen/v1";
 var MODELS = [
-  { id: "deepseek-v4-flash-free", label: "DeepSeek V4 Flash (\u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u0430\u044F)" },
+  { id: "deepseek-v4-flash-free", label: "Stella V3.8 Flash (\u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u0430\u044F)" },
   { id: "gpt-5.4", label: "GPT 5.4 (OpenAI)" },
   { id: "gpt-5.4-mini", label: "GPT 5.4 Mini (OpenAI)" },
   { id: "gpt-5.2", label: "GPT 5.2 (OpenAI)" },
@@ -48874,6 +48874,16 @@ var MODELS = [
   { id: "kimi-k2.6", label: "Kimi K2.6 (Moonshot)" },
   { id: "minimax-m3", label: "MiniMax M3" }
 ];
+var MODEL_ALIASES = {
+  "deepseek-v4-flash-free": "stella-v3.8-flash"
+};
+var MODEL_IDS = Object.fromEntries(Object.entries(MODEL_ALIASES).map(([id, alias]) => [alias, id]));
+function modelName(id) {
+  return MODEL_ALIASES[id] || id;
+}
+function modelId(name24) {
+  return MODEL_IDS[name24] || name24;
+}
 function loadConfig() {
   try {
     return JSON.parse(fs16.readFileSync(CONFIG_PATH, "utf8"));
@@ -48902,8 +48912,8 @@ var zen = createOpenAICompatible({
   baseURL: ZEN_BASE_URL,
   apiKey
 });
-function getModel(modelId) {
-  return zen.chatModel(modelId);
+function getModel(modelId2) {
+  return zen.chatModel(modelId2);
 }
 for (const envFile of [".env.local", ".env.development.local", ".env"]) {
   try {
@@ -48917,7 +48927,7 @@ for (const envFile of [".env.local", ".env.development.local", ".env"]) {
   }
 }
 var state = {
-  model: config2.model || MODELS[0].id,
+  model: modelId(config2.model || MODELS[0].id),
   messages: [],
   totalTokens: { input: 0, output: 0 },
   totalCost: 0,
@@ -48934,7 +48944,7 @@ if (args.includes("--version") || args.includes("-v")) {
   console.log(`stella-coder ${VERSION5}`);
   process.exit(0);
 }
-if (args.includes("--model")) state.model = args[args.indexOf("--model") + 1] || state.model;
+if (args.includes("--model")) state.model = modelId(args[args.indexOf("--model") + 1]) || state.model;
 function systemPrompt() {
   let projectContext = "";
   try {
@@ -48971,14 +48981,41 @@ ${map2.tree.slice(0, 200).join("\n")}
 - Git \u044D\u043A\u043E\u0441\u0438\u0441\u0442\u0435\u043C\u0430: \u0432\u0435\u0442\u043A\u0438, PR, \u043C\u0435\u0440\u0436\u0438, \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043D\u0438\u0435 \u043A\u043E\u043D\u0444\u043B\u0438\u043A\u0442\u043E\u0432
 - \u0410\u0432\u0442\u043E\u0441\u0436\u0430\u0442\u0438\u0435 \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u043D\u0435\u043E\u0431\u0445\u043E\u0434\u0438\u043C\u043E\u0441\u0442\u0438
 
-\u041F\u0440\u0430\u0432\u0438\u043B\u0430:
+\u041F\u0440\u0430\u0432\u0438\u043B\u0430 \u0440\u0430\u0431\u043E\u0442\u044B:
 - \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u044B (read_file, edit_file, write_file, bash, grep, glob, list_dir), \u0447\u0442\u043E\u0431\u044B \u0420\u0415\u0410\u041B\u042C\u041D\u041E \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0442\u044C \u0437\u0430\u0434\u0430\u0447\u0438.
 - \u041F\u0435\u0440\u0435\u0434 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0435\u043C \u0444\u0430\u0439\u043B\u0430 \u0432\u0441\u0435\u0433\u0434\u0430 \u0447\u0438\u0442\u0430\u0439 \u0435\u0433\u043E.
 - \u0414\u043B\u044F \u043C\u043D\u043E\u0433\u043E\u0448\u0430\u0433\u043E\u0432\u044B\u0445 \u0437\u0430\u0434\u0430\u0447 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439 todo_write.
 - \u0410\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043E\u043F\u0440\u0435\u0434\u0435\u043B\u044F\u0439 \u0438 \u0437\u0430\u043F\u0443\u0441\u043A\u0430\u0439 \u043B\u0438\u043D\u0442\u0435\u0440\u044B/\u0442\u0435\u0441\u0442\u044B \u043F\u043E\u0441\u043B\u0435 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439.
 - \u041F\u0440\u0438 \u0431\u043E\u043B\u044C\u0448\u043E\u043C \u043A\u043E\u043D\u0442\u0435\u043A\u0441\u0442\u0435 \u2014 \u0441\u0436\u0438\u043C\u0430\u0439 \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438.
-- \u041E\u0442\u0432\u0435\u0447\u0430\u0439 \u043A\u0440\u0430\u0442\u043A\u043E \u0438 \u043F\u043E \u0434\u0435\u043B\u0443, \u0432 \u0444\u043E\u0440\u043C\u0430\u0442\u0435 markdown. \u041A\u043E\u0434 \u2014 \u0432 \u0431\u043B\u043E\u043A\u0430\u0445 \u0441 \u0443\u043A\u0430\u0437\u0430\u043D\u0438\u0435\u043C \u044F\u0437\u044B\u043A\u0430.
-- \u041E\u0442\u0432\u0435\u0447\u0430\u0439 \u043D\u0430 \u044F\u0437\u044B\u043A\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F.${projectContext}${repoContext}`;
+- \u041E\u0442\u0432\u0435\u0447\u0430\u0439 \u043D\u0430 \u044F\u0437\u044B\u043A\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F.
+
+\u041A\u0430\u043A \u043F\u0438\u0441\u0430\u0442\u044C \u043A\u043E\u0434 \u2014 \u043F\u0438\u0448\u0438 \u043A\u0430\u043A \u0436\u0438\u0432\u043E\u0439 \u0441\u0435\u043D\u044C\u043E\u0440, \u0430 \u043D\u0435 \u043A\u0430\u043A \u0433\u0435\u043D\u0435\u0440\u0430\u0442\u043E\u0440 \u0442\u0435\u043A\u0441\u0442\u0430:
+- \u041F\u043E\u0434\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u0439\u0441\u044F \u043F\u043E\u0434 \u0441\u0442\u0438\u043B\u044C \u0444\u0430\u0439\u043B\u0430, \u043A\u043E\u0442\u043E\u0440\u044B\u0439 \u043F\u0440\u0430\u0432\u0438\u0448\u044C: \u0442\u0435 \u0436\u0435 \u043E\u0442\u0441\u0442\u0443\u043F\u044B, \u043A\u0430\u0432\u044B\u0447\u043A\u0438, \u0442\u043E\u0447\u043A\u0438 \u0441 \u0437\u0430\u043F\u044F\u0442\u043E\u0439, \u0438\u043C\u0435\u043D\u043E\u0432\u0430\u043D\u0438\u0435, \u043F\u043E\u0440\u044F\u0434\u043E\u043A \u0438\u043C\u043F\u043E\u0440\u0442\u043E\u0432, \u0438\u0434\u0438\u043E\u043C\u044B. \u0424\u0430\u0439\u043B \u0434\u043E\u043B\u0436\u0435\u043D \u0432\u044B\u0433\u043B\u044F\u0434\u0435\u0442\u044C \u0442\u0430\u043A, \u0431\u0443\u0434\u0442\u043E \u0435\u0433\u043E \u043F\u0438\u0441\u0430\u043B \u043E\u0434\u0438\u043D \u0447\u0435\u043B\u043E\u0432\u0435\u043A.
+- \u041F\u0438\u0448\u0438 \u043C\u0438\u043D\u0438\u043C\u0430\u043B\u044C\u043D\u044B\u0439 \u043A\u043E\u0434, \u043A\u043E\u0442\u043E\u0440\u044B\u0439 \u0440\u0435\u0448\u0430\u0435\u0442 \u0437\u0430\u0434\u0430\u0447\u0443. \u041D\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0439 \u0430\u0431\u0441\u0442\u0440\u0430\u043A\u0446\u0438\u0438, \u0441\u043B\u043E\u0438, \u0444\u0430\u0431\u0440\u0438\u043A\u0438, \u043A\u043E\u043D\u0444\u0438\u0433\u0438 \u0438 "\u0445\u0443\u043A\u0438 \u043D\u0430 \u0431\u0443\u0434\u0443\u0449\u0435\u0435", \u043A\u043E\u0442\u043E\u0440\u044B\u0445 \u043D\u0438\u043A\u0442\u043E \u043D\u0435 \u043F\u0440\u043E\u0441\u0438\u043B.
+- \u041D\u0435 \u043F\u0438\u0448\u0438 \u0437\u0430\u0449\u0438\u0442\u043D\u044B\u0439 \u043C\u0443\u0441\u043E\u0440: \u043B\u0438\u0448\u043D\u0438\u0435 try/catch, \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u0433\u043B\u043E\u0442\u0430\u044E\u0442 \u043E\u0448\u0438\u0431\u043A\u0443, \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0438 \u043D\u0430 null \u0442\u0430\u043C, \u0433\u0434\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0432\u0441\u0435\u0433\u0434\u0430 \u0435\u0441\u0442\u044C, \u0432\u0430\u043B\u0438\u0434\u0430\u0446\u0438\u044E \u0430\u0440\u0433\u0443\u043C\u0435\u043D\u0442\u043E\u0432 \u0432\u043D\u0443\u0442\u0440\u0435\u043D\u043D\u0438\u0445 \u0444\u0443\u043D\u043A\u0446\u0438\u0439.
+- \u0418\u043C\u0435\u043D\u0430 \u2014 \u043A\u043E\u0440\u043E\u0442\u043A\u0438\u0435 \u0438 \u0442\u043E\u0447\u043D\u044B\u0435, \u0438\u0437 \u044F\u0437\u044B\u043A\u0430 \u043F\u0440\u0435\u0434\u043C\u0435\u0442\u043D\u043E\u0439 \u043E\u0431\u043B\u0430\u0441\u0442\u0438 \u043F\u0440\u043E\u0435\u043A\u0442\u0430. \u041D\u0438\u043A\u0430\u043A\u0438\u0445 data, result, item, handleStuff, doProcess, MyClass, temp2.
+- \u0420\u0430\u043D\u043D\u0438\u0435 return \u0432\u043C\u0435\u0441\u0442\u043E \u043B\u0435\u0441\u0435\u043D\u043A\u0438 \u0438\u0437 else. \u041F\u043B\u043E\u0441\u043A\u0438\u0439 \u043A\u043E\u0434 \u0432\u043C\u0435\u0441\u0442\u043E \u0432\u043B\u043E\u0436\u0435\u043D\u043D\u043E\u0441\u0442\u0438 \u043D\u0430 4 \u0443\u0440\u043E\u0432\u043D\u044F.
+- \u041D\u0435 \u0434\u0443\u0431\u043B\u0438\u0440\u0443\u0439: \u0435\u0441\u043B\u0438 \u0442\u0430\u043A\u0430\u044F \u0444\u0443\u043D\u043A\u0446\u0438\u044F/\u0445\u0435\u043B\u043F\u0435\u0440/\u043A\u043E\u043D\u0441\u0442\u0430\u043D\u0442\u0430 \u0443\u0436\u0435 \u0435\u0441\u0442\u044C \u0432 \u043F\u0440\u043E\u0435\u043A\u0442\u0435 \u2014 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439 \u0435\u0451, \u0430 \u043D\u0435 \u043F\u0438\u0448\u0438 \u0432\u0442\u043E\u0440\u0443\u044E \u0442\u0430\u043A\u0443\u044E \u0436\u0435 \u0440\u044F\u0434\u043E\u043C.
+- \u0423\u0434\u0430\u043B\u044F\u0439 \u043A\u043E\u0434, \u043A\u043E\u0442\u043E\u0440\u044B\u0439 \u0437\u0430\u043C\u0435\u043D\u0438\u043B. \u041D\u0435 \u043E\u0441\u0442\u0430\u0432\u043B\u044F\u0439 \u0437\u0430\u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u044B\u0435 \u043A\u0443\u0441\u043A\u0438, \u0441\u0442\u0430\u0440\u044B\u0435 \u0432\u0435\u0440\u0441\u0438\u0438 \u0444\u0443\u043D\u043A\u0446\u0438\u0439 \u0438 //TODO \u043F\u0440\u043E "\u043F\u043E\u0442\u043E\u043C \u0443\u0431\u0440\u0430\u0442\u044C".
+
+\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438 \u2014 \u043F\u043E\u0447\u0442\u0438 \u043D\u0438\u043A\u043E\u0433\u0434\u0430:
+- \u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439 \u043F\u0438\u0448\u0435\u0442\u0441\u044F, \u0442\u043E\u043B\u044C\u043A\u043E \u0447\u0442\u043E\u0431\u044B \u043E\u0431\u044A\u044F\u0441\u043D\u0438\u0442\u044C \u043F\u0440\u0438\u0447\u0438\u043D\u0443 \u043D\u0435\u043E\u0447\u0435\u0432\u0438\u0434\u043D\u043E\u0433\u043E \u0440\u0435\u0448\u0435\u043D\u0438\u044F \u0438\u043B\u0438 \u043E\u0433\u0440\u0430\u043D\u0438\u0447\u0435\u043D\u0438\u0435, \u043A\u043E\u0442\u043E\u0440\u043E\u0435 \u0438\u0437 \u043A\u043E\u0434\u0430 \u043D\u0435 \u0432\u0438\u0434\u043D\u043E (\u0431\u0430\u0433 \u0431\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0438, \u0442\u0440\u0435\u0431\u043E\u0432\u0430\u043D\u0438\u0435 API, \u0433\u043E\u043D\u043A\u0430).
+- \u0417\u0430\u043F\u0440\u0435\u0449\u0435\u043D\u043E: \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438, \u043F\u0435\u0440\u0435\u0441\u043A\u0430\u0437\u044B\u0432\u0430\u044E\u0449\u0438\u0435 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0443\u044E \u0441\u0442\u0440\u043E\u043A\u0443 ("// \u0443\u0432\u0435\u043B\u0438\u0447\u0438\u0432\u0430\u0435\u043C \u0441\u0447\u0451\u0442\u0447\u0438\u043A"), \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438-\u0437\u0430\u0433\u043E\u043B\u043E\u0432\u043A\u0438 \u0441\u0435\u043A\u0446\u0438\u0439, "// \u0434\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u043E \u043C\u043D\u043E\u0439", "// \u0438\u0441\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E", "// \u0442\u0435\u043F\u0435\u0440\u044C \u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442 \u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u043E", "// \u0448\u0430\u0433 1/2/3".
+- \u041D\u0435 \u0441\u0442\u0430\u0432\u044C JSDoc/\u0434\u043E\u043A\u0441\u0442\u0440\u0438\u043D\u0433\u0438 \u043D\u0430 \u043A\u0430\u0436\u0434\u0443\u044E \u0444\u0443\u043D\u043A\u0446\u0438\u044E \u2014 \u0442\u043E\u043B\u044C\u043A\u043E \u0442\u0430\u043C, \u0433\u0434\u0435 \u0442\u0430\u043A \u0443\u0436\u0435 \u043F\u0440\u0438\u043D\u044F\u0442\u043E \u0432 \u044D\u0442\u043E\u043C \u0444\u0430\u0439\u043B\u0435.
+- \u041F\u0438\u0448\u0438 \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0438 \u043D\u0430 \u044F\u0437\u044B\u043A\u0435 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0445 \u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0435\u0432 \u0444\u0430\u0439\u043B\u0430.
+
+\u041A\u0430\u043A \u043E\u0442\u0432\u0435\u0447\u0430\u0442\u044C \u0442\u0435\u043A\u0441\u0442\u043E\u043C:
+- \u041E\u0431\u044B\u0447\u043D\u044B\u0439 \u0447\u0435\u043B\u043E\u0432\u0435\u0447\u0435\u0441\u043A\u0438\u0439 \u0442\u0435\u043A\u0441\u0442, \u043A\u043E\u0440\u043E\u0442\u043A\u043E \u0438 \u043F\u043E \u0434\u0435\u043B\u0443. \u041D\u0438\u043A\u0430\u043A\u043E\u0433\u043E markdown-\u043E\u0444\u043E\u0440\u043C\u043B\u0435\u043D\u0438\u044F \u0440\u0430\u0434\u0438 \u043E\u0444\u043E\u0440\u043C\u043B\u0435\u043D\u0438\u044F.
+- \u0417\u0430\u0433\u043E\u043B\u043E\u0432\u043A\u0438 (#, ##), \u0433\u043E\u0440\u0438\u0437\u043E\u043D\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u043B\u0438\u043D\u0438\u0438 (---), \u044D\u043C\u043E\u0434\u0437\u0438 \u0438 \u0436\u0438\u0440\u043D\u044B\u0439 \u0448\u0440\u0438\u0444\u0442 \u2014 \u043D\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439. \u0416\u0438\u0440\u043D\u044B\u043C \u043C\u043E\u0436\u043D\u043E \u0432\u044B\u0434\u0435\u043B\u0438\u0442\u044C \u043E\u0434\u043D\u043E \u0441\u043B\u043E\u0432\u043E, \u0435\u0441\u043B\u0438 \u0431\u0435\u0437 \u043D\u0435\u0433\u043E \u043F\u0440\u0430\u0432\u0434\u0430 \u043D\u0435\u043F\u043E\u043D\u044F\u0442\u043D\u043E.
+- \u0421\u043F\u0438\u0441\u043A\u0438 \u2014 \u0442\u043E\u043B\u044C\u043A\u043E \u043A\u043E\u0433\u0434\u0430 \u044D\u0442\u043E \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0441\u043F\u0438\u0441\u043E\u043A \u0438\u0437 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u0438\u0445 \u0440\u0430\u0432\u043D\u043E\u0437\u043D\u0430\u0447\u043D\u044B\u0445 \u043F\u0443\u043D\u043A\u0442\u043E\u0432. \u041E\u0431\u044A\u044F\u0441\u043D\u0435\u043D\u0438\u044F \u043F\u0438\u0448\u0438 \u043F\u0440\u043E\u0437\u043E\u0439, \u0430 \u043D\u0435 \u0431\u0443\u043B\u043B\u0435\u0442\u0430\u043C\u0438.
+- \u0414\u043B\u0438\u043D\u043D\u043E\u0435 \u0442\u0438\u0440\u0435 (\u2014) \u0441\u0442\u0430\u0432\u044C \u0440\u0435\u0434\u043A\u043E, \u043A\u0430\u043A \u0447\u0435\u043B\u043E\u0432\u0435\u043A: \u0447\u0430\u0449\u0435 \u043F\u043E\u0434\u0445\u043E\u0434\u0438\u0442 \u0437\u0430\u043F\u044F\u0442\u0430\u044F, \u0441\u043A\u043E\u0431\u043A\u0438 \u0438\u043B\u0438 \u0434\u0432\u043E\u0435\u0442\u043E\u0447\u0438\u0435.
+- \u041D\u0438\u043A\u0430\u043A\u0438\u0445 \u0432\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u0439 \u0438 \u0437\u0430\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0439: "\u041A\u043E\u043D\u0435\u0447\u043D\u043E!", "\u041E\u0442\u043B\u0438\u0447\u043D\u044B\u0439 \u0432\u043E\u043F\u0440\u043E\u0441", "\u0412\u043E\u0442 \u0447\u0442\u043E \u044F \u0441\u0434\u0435\u043B\u0430\u043B", "\u041F\u043E\u0434\u0432\u043E\u0434\u044F \u0438\u0442\u043E\u0433", "\u0412 \u0446\u0435\u043B\u043E\u043C", "\u041D\u0430\u0434\u0435\u044E\u0441\u044C, \u044D\u0442\u043E \u043F\u043E\u043C\u043E\u0433\u043B\u043E", "\u0414\u0430\u0439\u0442\u0435 \u0437\u043D\u0430\u0442\u044C, \u0435\u0441\u043B\u0438 \u043D\u0443\u0436\u043D\u043E \u0435\u0449\u0451".
+- \u041D\u0435 \u0445\u0432\u0430\u043B\u0438 \u043A\u043E\u0434 \u0438 \u043D\u0435 \u0440\u0435\u043A\u043B\u0430\u043C\u0438\u0440\u0443\u0439: "\u043C\u043E\u0449\u043D\u044B\u0439", "\u0433\u0438\u0431\u043A\u0438\u0439", "\u0447\u0438\u0441\u0442\u044B\u0439 \u0438 \u043C\u0430\u0441\u0448\u0442\u0430\u0431\u0438\u0440\u0443\u0435\u043C\u044B\u0439", "\u0433\u043E\u0442\u043E\u0432 \u043A \u043F\u0440\u043E\u0434\u0430\u043A\u0448\u0435\u043D\u0443", "\u0438\u0433\u0440\u0430\u0435\u0442 \u043A\u043B\u044E\u0447\u0435\u0432\u0443\u044E \u0440\u043E\u043B\u044C", "\u044D\u0442\u043E \u043D\u0435 \u043F\u0440\u043E\u0441\u0442\u043E X, \u0430 Y".
+- \u041D\u0435 \u043F\u0438\u0448\u0438 \u0448\u0430\u0431\u043B\u043E\u043D\u043D\u044B\u0435 \u043F\u0440\u0435\u0434\u043E\u0441\u0442\u0435\u0440\u0435\u0436\u0435\u043D\u0438\u044F ("\u0432\u0430\u0436\u043D\u043E \u043E\u0442\u043C\u0435\u0442\u0438\u0442\u044C", "\u0441\u0442\u043E\u0438\u0442 \u0443\u0447\u0438\u0442\u044B\u0432\u0430\u0442\u044C") \u0438 \u043D\u0435 \u043F\u0435\u0440\u0435\u0441\u043A\u0430\u0437\u044B\u0432\u0430\u0439 \u0441\u0434\u0435\u043B\u0430\u043D\u043D\u043E\u0435 \u0441\u043F\u0438\u0441\u043A\u043E\u043C \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439, \u0435\u0441\u043B\u0438 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C \u043D\u0435 \u043F\u0440\u043E\u0441\u0438\u043B.
+- \u041D\u0430\u0447\u0438\u043D\u0430\u0439 \u0441 \u0441\u0443\u0442\u0438: \u0447\u0442\u043E \u043F\u043E\u043B\u0443\u0447\u0438\u043B\u043E\u0441\u044C \u0438\u043B\u0438 \u0447\u0442\u043E \u0441\u043B\u043E\u043C\u0430\u043B\u043E\u0441\u044C. \u0414\u0435\u0442\u0430\u043B\u0438 \u2014 \u043F\u043E\u0442\u043E\u043C.
+- \u041D\u0435 \u0432\u0440\u0438 \u043F\u0440\u043E \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442. \u0422\u0435\u0441\u0442\u044B \u0443\u043F\u0430\u043B\u0438 \u2014 \u0442\u0430\u043A \u0438 \u0441\u043A\u0430\u0436\u0438 \u0438 \u043F\u043E\u043A\u0430\u0436\u0438 \u0432\u044B\u0432\u043E\u0434. \u0427\u0442\u043E-\u0442\u043E \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u043B \u2014 \u0441\u043A\u0430\u0436\u0438, \u0447\u0442\u043E \u043D\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u043B.
+
+\u041A\u043E\u0434 \u2014 \u0432 \u0431\u043B\u043E\u043A\u0430\u0445 \u0441 \u0443\u043A\u0430\u0437\u0430\u043D\u0438\u0435\u043C \u044F\u0437\u044B\u043A\u0430. \u041E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0435 \u0441\u0442\u0440\u043E\u043A\u0438 \u043A\u043E\u0434\u0430 \u0443\u043F\u043E\u043C\u0438\u043D\u0430\u0439 \u043A\u0430\u043A file.ts:42.${projectContext}${repoContext}`;
 }
 var spinnerTimer = null;
 function startSpinner(label) {
@@ -48999,10 +49036,35 @@ function stopSpinner() {
     process.stdout.write("\r" + " ".repeat(70) + "\r");
   }
 }
+var READONLY_BASH = /^(git\s+(status|diff|log|show|branch|remote|stash\s+list|rev-parse|ls-files)|ls|dir|pwd|cd|cat|type|head|tail|wc|echo|whoami|hostname|date|which|where|find|grep|rg|node\s+-[ve]|npm\s+(test|run|ls|view|-v)|pnpm\s+(test|run|lint|build|list|-v)|yarn\s+(test|run)|npx\s+(tsc|eslint|prettier|jest|vitest)|tsc|eslint|prettier|jest|vitest|pytest|python\s+-m\s+pytest|go\s+(test|build|vet)|cargo\s+(test|build|check|clippy)|dotnet\s+(test|build))\b/i;
+var DANGEROUS_BASH = /(\brm\s+-[a-z]*[rf]|\brmdir\b|\bdel\s+\/|\bformat\b|\bmkfs|\bdd\s+if=|\bshutdown\b|\breboot\b|\bsudo\b|\bchmod\s+777|\bcurl\b[^|]*\|\s*(sh|bash)|\bwget\b[^|]*\|\s*(sh|bash)|\biex\b|Invoke-Expression|\bgit\s+push\b|\bgit\s+reset\s+--hard|\bgit\s+clean\s+-|\bnpm\s+publish|\breg\s+delete|\btaskkill\b|\bRemove-Item\b)/i;
+function isInProject(p) {
+  const root = process.cwd();
+  const abs = path17.resolve(root, p);
+  return abs === root || abs.startsWith(root + path17.sep);
+}
+function isSafeWrite(p) {
+  if (!p || !isInProject(p)) return false;
+  const rel = path17.relative(process.cwd(), path17.resolve(process.cwd(), p));
+  const parts = rel.split(path17.sep);
+  if (parts[0] === ".git" || parts[0] === "node_modules") return false;
+  return !/^\.env/.test(parts[parts.length - 1]);
+}
+function isSafeBash(command2) {
+  if (!command2 || DANGEROUS_BASH.test(command2)) return false;
+  if (/>|`|\$\(/.test(command2)) return false;
+  return command2.split(/&&|\|\||;|\||\n/).map((c2) => c2.trim()).filter(Boolean).every((c2) => READONLY_BASH.test(c2));
+}
+function isAutoAllowed(kind, details) {
+  if (kind === "write") return isSafeWrite(details.path);
+  if (kind === "bash") return isSafeBash(details.command);
+  return false;
+}
 var rl;
-async function askPermission(kind, summary) {
+async function askPermission(kind, summary, details = {}) {
   if (printMode) return true;
   if (state.alwaysAllow.has(kind)) return true;
+  if (isAutoAllowed(kind, details)) return true;
   stopSpinner();
   console.log();
   console.log(box([
@@ -49089,17 +49151,12 @@ async function runTurn(userText) {
     console.log(red("\n  \u2717 API \u043A\u043B\u044E\u0447 \u043D\u0435 \u0437\u0430\u0434\u0430\u043D. \u0412\u0432\u0435\u0434\u0438 /login \u0434\u043B\u044F \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438.\n"));
     return;
   }
-  console.log(dim(`  \u2192 \u043C\u043E\u0434\u0435\u043B\u044C: ${state.model}, \u043A\u043B\u044E\u0447: ${apiKey ? "\u0435\u0441\u0442\u044C" : "\u043D\u0435\u0442"}`));
+  console.log(dim(`  \u2192 \u043C\u043E\u0434\u0435\u043B\u044C: ${modelName(state.model)}, \u043A\u043B\u044E\u0447: ${apiKey ? "\u0435\u0441\u0442\u044C" : "\u043D\u0435\u0442"}`));
   state.messages.push({ role: "user", content: userText });
   state.turns++;
   state.interrupted = false;
   const isOllama = state.model.startsWith("ollama:");
   const controller = new AbortController();
-  const timeout = setTimeout(() => {
-    controller.abort();
-    stopSpinner();
-    console.log("\n" + red("\u2717 \u0422\u0430\u0439\u043C\u0430\u0443\u0442: API \u043D\u0435 \u043E\u0442\u0432\u0435\u0447\u0430\u0435\u0442 30 \u0441\u0435\u043A\u0443\u043D\u0434. \u041F\u0440\u043E\u0432\u0435\u0440\u044C \u043C\u043E\u0434\u0435\u043B\u044C: /model"));
-  }, 3e4);
   const onSigint = () => {
     state.interrupted = true;
     controller.abort();
@@ -49175,7 +49232,7 @@ async function runTurn(userText) {
               state.totalTokens.input += inTok2;
               state.totalTokens.output += outTok2;
               const dur2 = ((Date.now() - t0) / 1e3).toFixed(1);
-              console.log(dim("  ") + darkGray(`\u23F1 ${dur2}s \xB7 \u2191${inTok2} \u2193${outTok2} \u0442\u043E\u043A \xB7 ${blue(state.model)}`));
+              console.log(dim("  ") + darkGray(`\u23F1 ${dur2}s \xB7 \u2191${inTok2} \u2193${outTok2} \u0442\u043E\u043A \xB7 ${blue(modelName(state.model))}`));
             }
           } catch (e2) {
             console.log("\n" + red("\u2717 \u041E\u0448\u0438\u0431\u043A\u0430 fallback: ") + String(e2?.message || e2).slice(0, 300));
@@ -49261,7 +49318,7 @@ async function runTurn(userText) {
       const dur = ((Date.now() - t0) / 1e3).toFixed(1);
       console.log();
       console.log(
-        dim("  ") + darkGray(`\u23F1 ${dur}s \xB7 \u2191${inTok} \u2193${outTok} \u0442\u043E\u043A \xB7 ~$${cost.toFixed(4)} \xB7 ${blue(state.model)}`)
+        dim("  ") + darkGray(`\u23F1 ${dur}s \xB7 \u2191${inTok} \u2193${outTok} \u0442\u043E\u043A \xB7 ~$${cost.toFixed(4)} \xB7 ${blue(modelName(state.model))}`)
       );
     }
   } catch (e) {
@@ -49275,7 +49332,6 @@ async function runTurn(userText) {
       }
     }
   } finally {
-    clearTimeout(timeout);
     process.removeListener("SIGINT", onSigint);
   }
   console.log();
@@ -49722,7 +49778,7 @@ async function handleCommand(line) {
       MODELS.forEach((m, i) => {
         const active = m.id === state.model;
         console.log(
-          "  " + (active ? violet("\u25CF ") : darkGray("\u25CB ")) + bold(white(String(i + 1))) + ". " + (active ? violet(m.label) : gray(m.label)) + dim(` (${m.id})`)
+          "  " + (active ? violet("\u25CF ") : darkGray("\u25CB ")) + bold(white(String(i + 1))) + ". " + (active ? violet(m.label) : gray(m.label)) + dim(` (${modelName(m.id)})`)
         );
       });
       const ans = await question("\n  " + violet("\u041D\u043E\u043C\u0435\u0440 \u043C\u043E\u0434\u0435\u043B\u0438 \u203A "));
@@ -49730,14 +49786,14 @@ async function handleCommand(line) {
       if (MODELS[idx]) {
         state.model = MODELS[idx].id;
         saveConfig({ ...loadConfig(), model: state.model });
-        console.log("  " + green("\u2713 \u041C\u043E\u0434\u0435\u043B\u044C: ") + blue(state.model) + "\n");
+        console.log("  " + green("\u2713 \u041C\u043E\u0434\u0435\u043B\u044C: ") + blue(modelName(state.model)) + "\n");
       }
       return;
     }
     case "/clear": {
       state.messages = [];
       console.clear();
-      printBanner({ model: state.model, cwd: process.cwd(), version: VERSION5 });
+      printBanner({ model: modelName(state.model), cwd: process.cwd(), version: VERSION5 });
       return;
     }
     case "/compact": {
@@ -49770,7 +49826,7 @@ ${text2}` }, { role: "assistant", content: "\u041F\u043E\u043D\u044F\u043B, \u04
         dim("\u0422\u043E\u043A\u0435\u043D\u044B (\u0432\u0445\u043E\u0434): ") + blue(String(state.totalTokens.input)),
         dim("\u0422\u043E\u043A\u0435\u043D\u044B (\u0432\u044B\u0445\u043E\u0434):") + blue(" " + String(state.totalTokens.output)),
         dim("\u0421\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C:     ") + green(`~$${state.totalCost.toFixed(4)}`),
-        dim("\u041C\u043E\u0434\u0435\u043B\u044C:        ") + violet(state.model)
+        dim("\u041C\u043E\u0434\u0435\u043B\u044C:        ") + violet(modelName(state.model))
       ], { title: "\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043A\u0430", padding: 2 }));
       console.log();
       return;
@@ -49819,7 +49875,7 @@ ${md}`);
       console.log();
       console.log(box([
         dim("\u041A\u043E\u043D\u0444\u0438\u0433:   ") + gray(CONFIG_PATH),
-        dim("\u041C\u043E\u0434\u0435\u043B\u044C:   ") + violet(state.model),
+        dim("\u041C\u043E\u0434\u0435\u043B\u044C:   ") + violet(modelName(state.model)),
         dim("API-\u043A\u043B\u044E\u0447: ") + (apiKey ? green("\u0437\u0430\u0434\u0430\u043D") : red("\u043D\u0435 \u0437\u0430\u0434\u0430\u043D")),
         dim("Endpoint: ") + gray(ZEN_BASE_URL),
         dim("\u0412\u0441\u0435\u0433\u0434\u0430:   ") + gray([...state.alwaysAllow].join(", ") || "\u2014")
@@ -51084,7 +51140,7 @@ ${os12.platform()} ${os12.release()} (${os12.arch()})
       }
       try {
         const session = JSON.parse(fs16.readFileSync(arg.trim(), "utf8"));
-        state.model = session.model || state.model;
+        state.model = modelId(session.model || state.model);
         state.messages = session.messages || [];
         console.log(green(`
   \u2713 \u0421\u0435\u0441\u0441\u0438\u044F \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u0430 (${state.messages.length} \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439)
@@ -54927,11 +54983,11 @@ async function handleOllama(arg) {
       console.log(dim("  \u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043D\u043E\u043C\u0435\u0440\n"));
       return;
     }
-    const modelName = ollamaModels[idx].name;
-    console.log(green(`  \u2713 \u041C\u043E\u0434\u0435\u043B\u044C: ${modelName} (Ollama local)`));
+    const modelName2 = ollamaModels[idx].name;
+    console.log(green(`  \u2713 \u041C\u043E\u0434\u0435\u043B\u044C: ${modelName2} (Ollama local)`));
     console.log(dim("  \u0422\u0435\u043F\u0435\u0440\u044C \u0432\u0441\u0435 \u0437\u0430\u043F\u0440\u043E\u0441\u044B \u0431\u0443\u0434\u0443\u0442 \u0438\u0434\u0442\u0438 \u0447\u0435\u0440\u0435\u0437 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u0443\u044E \u043C\u043E\u0434\u0435\u043B\u044C"));
     console.log(dim("  \u0414\u043B\u044F \u0432\u043E\u0437\u0432\u0440\u0430\u0442\u0430 \u043A \u043E\u0431\u043B\u0430\u0447\u043D\u043E\u0439: /model\n"));
-    state.model = `ollama:${modelName}`;
+    state.model = `ollama:${modelName2}`;
     return;
   }
   console.log(box([
@@ -55271,7 +55327,7 @@ async function main() {
     }
   }
   console.clear();
-  printBanner({ model: state.model, cwd: process.cwd(), version: VERSION5 });
+  printBanner({ model: modelName(state.model), cwd: process.cwd(), version: VERSION5 });
   let lastSigint2 = 0;
   rl.on("SIGINT", () => {
     const now2 = Date.now();

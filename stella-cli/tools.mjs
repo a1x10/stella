@@ -43,7 +43,7 @@ export function createTools(permissions) {
         content: z.string(),
       }),
       execute: async ({ path: p, content }) => {
-        const ok = await permissions.ask("write", `Write(${p}) — ${content.split("\n").length} строк`)
+        const ok = await permissions.ask("write", `Write(${p}) — ${content.split("\n").length} строк`, { path: p })
         if (!ok) return { error: "Пользователь отклонил запись файла" }
         const abs = resolveSafe(p)
         fs.mkdirSync(path.dirname(abs), { recursive: true })
@@ -68,7 +68,7 @@ export function createTools(permissions) {
         const count = src.split(old_string).length - 1
         if (count === 0) return { error: "old_string не найден в файле" }
         if (count > 1 && !replace_all) return { error: `old_string встречается ${count} раз — уточни контекст или replace_all` }
-        const ok = await permissions.ask("write", `Edit(${p})`)
+        const ok = await permissions.ask("write", `Edit(${p})`, { path: p })
         if (!ok) return { error: "Пользователь отклонил правку" }
         const out = replace_all ? src.split(old_string).join(new_string) : src.replace(old_string, new_string)
         fs.writeFileSync(abs, out, "utf8")
@@ -196,7 +196,7 @@ export function createTools(permissions) {
         timeout_ms: z.number().optional(),
       }),
       execute: async ({ command, timeout_ms = 120000 }) => {
-        const ok = await permissions.ask("bash", `Bash(${command})`)
+        const ok = await permissions.ask("bash", `Bash(${command})`, { command })
         if (!ok) return { error: "Пользователь отклонил выполнение команды" }
         try {
           const out = execSync(command, {
