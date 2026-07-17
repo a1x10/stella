@@ -49356,6 +49356,68 @@ async function runTurn(userText) {
   }
   console.log();
 }
+var WALK_IGNORE = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  ".cache",
+  "__pycache__",
+  ".venv",
+  "venv",
+  "coverage",
+  ".nyc_output"
+]);
+function* walkFiles(root, limit = 1e4) {
+  const stack = [root];
+  let count = 0;
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try {
+      entries = fs16.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (WALK_IGNORE.has(e.name)) continue;
+      const full = path17.join(dir, e.name);
+      if (e.isDirectory()) {
+        stack.push(full);
+      } else {
+        yield full;
+        if (++count >= limit) return;
+      }
+    }
+  }
+}
+function globToRegExp(glob) {
+  const rx = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+  return new RegExp(`^${rx}$`, "i");
+}
+function renderTree(root, limit = 2e3) {
+  const lines = [];
+  let count = 0;
+  function walk(dir, prefix) {
+    let entries;
+    try {
+      entries = fs16.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries = entries.filter((e) => !WALK_IGNORE.has(e.name)).sort((a, b) => a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1);
+    entries.forEach((e, i) => {
+      if (count >= limit) return;
+      const last = i === entries.length - 1;
+      lines.push(prefix + (last ? "\u2514\u2500\u2500 " : "\u251C\u2500\u2500 ") + e.name + (e.isDirectory() ? "/" : ""));
+      count++;
+      if (e.isDirectory()) walk(path17.join(dir, e.name), prefix + (last ? "    " : "\u2502   "));
+    });
+  }
+  walk(root, "");
+  return { lines, truncated: count >= limit };
+}
 var COMMANDS = [
   // Основные
   ["/help", "\u0432\u0441\u0435 \u043A\u043E\u043C\u0430\u043D\u0434\u044B"],
@@ -50092,18 +50154,25 @@ ${md}`);
     }
     case "/find": {
       if (!arg) {
-        console.log(dim("\n  \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u0435: /find <\u043F\u0430\u0442\u0442\u0435\u0440\u043D>\n"));
+        console.log(dim("\n  \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u0435: /find <\u043F\u0430\u0442\u0442\u0435\u0440\u043D>   (\u043D\u0430\u043F\u0440. *.js, Button?.tsx)\n"));
         return;
       }
-      try {
-        const { execSync: execSync17 } = await import("node:child_process");
-        const result = execSync17(`dir /s /b "${arg}"`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
-        console.log("\n" + result + "\n");
-      } catch (e) {
-        console.log(red(`
-  \u2717 \u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B
-`));
+      const rx = globToRegExp(arg.trim());
+      const found = [];
+      for (const file2 of walkFiles(process.cwd())) {
+        if (rx.test(path17.basename(file2))) {
+          found.push(path17.relative(process.cwd(), file2));
+          if (found.length >= 500) break;
+        }
       }
+      if (!found.length) {
+        console.log(red("\n  \u2717 \u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B\n"));
+        return;
+      }
+      console.log(`
+  \u041D\u0430\u0439\u0434\u0435\u043D\u043E: ${found.length}${found.length >= 500 ? "+" : ""}`);
+      found.forEach((f) => console.log(dim("  " + f)));
+      console.log();
       return;
     }
     case "/grep": {
@@ -50125,16 +50194,18 @@ ${md}`);
       return;
     }
     case "/tree": {
-      const treePath = arg || ".";
-      try {
-        const { execSync: execSync17 } = await import("node:child_process");
-        const result = execSync17(`tree "${treePath}" /F /A`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
-        console.log("\n" + result + "\n");
-      } catch {
+      const treePath = path17.resolve(process.cwd(), arg || ".");
+      if (!fs16.existsSync(treePath)) {
         console.log(red(`
-  \u2717 \u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0441\u0442\u0440\u043E\u0438\u0442\u044C \u0434\u0435\u0440\u0435\u0432\u043E
+  \u2717 \u041F\u0443\u0442\u044C \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D: ${arg || "."}
 `));
+        return;
       }
+      const { lines, truncated } = renderTree(treePath);
+      console.log("\n" + (arg || ".") + "/");
+      lines.forEach((l) => console.log(l));
+      if (truncated) console.log(dim("  \u2026 \u0434\u0435\u0440\u0435\u0432\u043E \u043E\u0431\u0440\u0435\u0437\u0430\u043D\u043E"));
+      console.log();
       return;
     }
     case "/head": {
@@ -51599,19 +51670,25 @@ ${os12.platform()} ${os12.release()} (${os12.arch()})
     }
     case "/search": {
       if (!arg) {
-        console.log(dim("\n  \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u0435: /search <\u0438\u043C\u044F \u0444\u0430\u0439\u043B\u0430>\n"));
+        console.log(dim("\n  \u0418\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043D\u0438\u0435: /search <\u0447\u0430\u0441\u0442\u044C \u0438\u043C\u0435\u043D\u0438>   (\u0438\u0449\u0435\u0442 \u0432 \u0442\u0435\u043A\u0443\u0449\u0435\u0439 \u043F\u0430\u043F\u043A\u0435)\n"));
         return;
       }
-      try {
-        const result = execSync16(`dir /s /b "C:\\*${arg}*"`, { encoding: "utf8", stdio: "pipe", timeout: 1e4 });
-        const files = result.split("\n").filter((f) => f.trim()).slice(0, 20);
-        console.log(`
-  \u041D\u0430\u0439\u0434\u0435\u043D\u043E \u0444\u0430\u0439\u043B\u043E\u0432: ${files.length}`);
-        files.forEach((f) => console.log(`  ${dim(f.trim())}`));
-        console.log();
-      } catch {
-        console.log(dim("\n  \u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B\n"));
+      const needle = arg.trim().toLowerCase();
+      const files = [];
+      for (const file2 of walkFiles(process.cwd())) {
+        if (path17.basename(file2).toLowerCase().includes(needle)) {
+          files.push(path17.relative(process.cwd(), file2));
+          if (files.length >= 50) break;
+        }
       }
+      if (!files.length) {
+        console.log(dim("\n  \u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u044B\n"));
+        return;
+      }
+      console.log(`
+  \u041D\u0430\u0439\u0434\u0435\u043D\u043E: ${files.length}${files.length >= 50 ? "+" : ""}`);
+      files.forEach((f) => console.log(dim("  " + f)));
+      console.log();
       return;
     }
     // ═══════════════════════════════════════════════════

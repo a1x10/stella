@@ -606,6 +606,61 @@ async function runTurn(userText) {
   console.log()
 }
 
+// ---------- обход файлов (кроссплатформенно, без внешних утилит) ----------
+const WALK_IGNORE = new Set([
+  "node_modules", ".git", "dist", "build", ".next", ".cache",
+  "__pycache__", ".venv", "venv", "coverage", ".nyc_output",
+])
+
+// перечисляет файлы под root в ширину, пропуская мусорные каталоги
+function* walkFiles(root, limit = 10000) {
+  const stack = [root]
+  let count = 0
+  while (stack.length) {
+    const dir = stack.pop()
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { continue }
+    for (const e of entries) {
+      if (WALK_IGNORE.has(e.name)) continue
+      const full = path.join(dir, e.name)
+      if (e.isDirectory()) {
+        stack.push(full)
+      } else {
+        yield full
+        if (++count >= limit) return
+      }
+    }
+  }
+}
+
+// glob-паттерн имени файла (*.js, foo?.ts) → регэксп по basename, без учёта регистра
+function globToRegExp(glob) {
+  const rx = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")
+  return new RegExp(`^${rx}$`, "i")
+}
+
+// рисует дерево каталога ASCII-ветками, как `tree /F /A`
+function renderTree(root, limit = 2000) {
+  const lines = []
+  let count = 0
+  function walk(dir, prefix) {
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    entries = entries
+      .filter((e) => !WALK_IGNORE.has(e.name))
+      .sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1))
+    entries.forEach((e, i) => {
+      if (count >= limit) return
+      const last = i === entries.length - 1
+      lines.push(prefix + (last ? "└── " : "├── ") + e.name + (e.isDirectory() ? "/" : ""))
+      count++
+      if (e.isDirectory()) walk(path.join(dir, e.name), prefix + (last ? "    " : "│   "))
+    })
+  }
+  walk(root, "")
+  return { lines, truncated: count >= limit }
+}
+
 // ---------- slash commands ----------
 const COMMANDS = [
   // Основные
@@ -1348,14 +1403,19 @@ async function handleCommand(line) {
       return
     }
     case "/find": {
-      if (!arg) { console.log(dim("\n  Использование: /find <паттерн>\n")); return }
-      try {
-        const { execSync } = await import("node:child_process")
-        const result = execSync(`dir /s /b "${arg}"`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
-        console.log("\n" + result + "\n")
-      } catch (e) {
-        console.log(red(`\n  ✗ Файлы не найдены\n`))
+      if (!arg) { console.log(dim("\n  Использование: /find <паттерн>   (напр. *.js, Button?.tsx)\n")); return }
+      const rx = globToRegExp(arg.trim())
+      const found = []
+      for (const file of walkFiles(process.cwd())) {
+        if (rx.test(path.basename(file))) {
+          found.push(path.relative(process.cwd(), file))
+          if (found.length >= 500) break
+        }
       }
+      if (!found.length) { console.log(red("\n  ✗ Файлы не найдены\n")); return }
+      console.log(`\n  Найдено: ${found.length}${found.length >= 500 ? "+" : ""}`)
+      found.forEach((f) => console.log(dim("  " + f)))
+      console.log()
       return
     }
     case "/grep": {
@@ -1372,14 +1432,13 @@ async function handleCommand(line) {
       return
     }
     case "/tree": {
-      const treePath = arg || "."
-      try {
-        const { execSync } = await import("node:child_process")
-        const result = execSync(`tree "${treePath}" /F /A`, { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] })
-        console.log("\n" + result + "\n")
-      } catch {
-        console.log(red(`\n  ✗ Не удалось построить дерево\n`))
-      }
+      const treePath = path.resolve(process.cwd(), arg || ".")
+      if (!fs.existsSync(treePath)) { console.log(red(`\n  ✗ Путь не найден: ${arg || "."}\n`)); return }
+      const { lines, truncated } = renderTree(treePath)
+      console.log("\n" + (arg || ".") + "/")
+      lines.forEach((l) => console.log(l))
+      if (truncated) console.log(dim("  … дерево обрезано"))
+      console.log()
       return
     }
     case "/head": {
@@ -2461,14 +2520,19 @@ async function handleCommand(line) {
       return
     }
     case "/search": {
-      if (!arg) { console.log(dim("\n  Использование: /search <имя файла>\n")); return }
-      try {
-        const result = execSync(`dir /s /b "C:\\*${arg}*"` , { encoding: "utf8", stdio: "pipe", timeout: 10000 })
-        const files = result.split("\n").filter(f => f.trim()).slice(0, 20)
-        console.log(`\n  Найдено файлов: ${files.length}`)
-        files.forEach(f => console.log(`  ${dim(f.trim())}`))
-        console.log()
-      } catch { console.log(dim("\n  Файлы не найдены\n")) }
+      if (!arg) { console.log(dim("\n  Использование: /search <часть имени>   (ищет в текущей папке)\n")); return }
+      const needle = arg.trim().toLowerCase()
+      const files = []
+      for (const file of walkFiles(process.cwd())) {
+        if (path.basename(file).toLowerCase().includes(needle)) {
+          files.push(path.relative(process.cwd(), file))
+          if (files.length >= 50) break
+        }
+      }
+      if (!files.length) { console.log(dim("\n  Файлы не найдены\n")); return }
+      console.log(`\n  Найдено: ${files.length}${files.length >= 50 ? "+" : ""}`)
+      files.forEach((f) => console.log(dim("  " + f)))
+      console.log()
       return
     }
 
