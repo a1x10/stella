@@ -186,8 +186,14 @@ function systemPrompt() {
     repoContext = `\n\n# Карта проекта (${map.summary})\n\`\`\`\n${map.tree.slice(0, 200).join("\n")}\n\`\`\``
   } catch {}
 
+  const osName = { win32: "Windows", darwin: "macOS", linux: "Linux" }[os.platform()] || os.platform()
+  const shellHint = os.platform() === "win32"
+    ? "Команды в bash выполняются через cmd.exe — используй Windows-синтаксис (dir, type, findstr, обратные слэши в путях)."
+    : "Команды в bash выполняются через sh — используй POSIX-синтаксис (ls, cat, grep, прямые слэши в путях)."
+
   return `Ты — Stella, ИИ-агент терминального агента Stella Coder 4.0 (аналог Claude Code / Cursor).
-Ты — эксперт-программист с огромным контекстом, работающий в: ${process.cwd()} (ОС: ${os.platform()}).
+Ты — эксперт-программист с огромным контекстом, работающий в: ${process.cwd()} (ОС: ${osName}).
+${shellHint}
 
 Твои возможности:
 - Огромный контекст: ты "держишь в голове" структуру всего репозитория

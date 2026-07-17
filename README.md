@@ -20,10 +20,19 @@
 
 ## Quick Install
 
-```bash
-npm install -g stella-coder
-stella
+Одна команда, без npm. Скачивается готовый бандл с GitHub.
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/a1x10/stella/master/install.ps1 | iex
 ```
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/a1x10/stella/master/install.sh | sh
+```
+
+Затем запуск командой `stella` из любого терминала.
 
 ## Usage
 
